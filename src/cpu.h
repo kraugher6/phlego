@@ -53,6 +53,9 @@ struct BType {
     uint8_t funct3; ///< Function 3 field
 };
 
+/**
+ * @brief Enum for opcodes.
+ */
 enum class Opcode : uint8_t {
     R_TYPE = 0x33,
     I_TYPE_LOAD = 0x03,
@@ -63,6 +66,9 @@ enum class Opcode : uint8_t {
     J_TYPE = 0x6F
 };
 
+/**
+ * @brief Enum for funct3 values.
+ */
 enum class Funct3 : uint8_t {
     // R-Type and I-Type ALU
     ADD_SUB = 0x0,
@@ -127,6 +133,11 @@ public:
      */
     void execute_load(const IType& instr);
 
+    /**
+     * @brief Execute an ALU instruction.
+     *
+     * @param instr The decoded I-Type instruction.
+     */
     void execute_alu(const IType& instr);
 
     /**
@@ -171,7 +182,11 @@ public:
      */
     void set_sp(uint32_t address);
 
+    /**
+     * @brief Print the CPU registers.
+     */
     void print_registers() const;
+
 private:
     Memory& memory; ///< Reference to the memory object.
     uint32_t pc; ///< Program Counter.

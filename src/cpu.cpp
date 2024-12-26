@@ -3,6 +3,11 @@
 #include <fstream>
 
 // Constructor
+/**
+ * @brief Construct a new CPU object.
+ *
+ * @param memory Reference to the memory object.
+ */
 CPU::CPU(Memory& memory) : memory(memory), pc(0) {
     // Initialize registers to zero
     for (auto& reg : registers) {
@@ -15,6 +20,12 @@ CPU::CPU(Memory& memory) : memory(memory), pc(0) {
     LOG_INFO("CPU initialized with stack pointer set to: 0x" + Memory::to_hex_string(registers[2]));
 }
 
+/**
+ * @brief Decode an instruction.
+ *
+ * @param instruction The instruction to decode.
+ * @return std::variant<RType, IType, SType, BType, JType> The decoded instruction.
+ */
 std::variant<RType, IType, SType, BType, JType> CPU::decode(uint32_t instruction) {
     if (instruction == 0) {
         LOG_ERROR("Encountered a zero instruction, which is unsupported.");
@@ -129,6 +140,9 @@ std::variant<RType, IType, SType, BType, JType> CPU::decode(uint32_t instruction
     }
 }
 
+/**
+ * @brief Execute the fetch-decode-run cycle.
+ */
 void CPU::run() {
     // Dump CPU registers before starting execution
     LOG_INFO("CPU state at start:");
@@ -181,6 +195,11 @@ void CPU::run() {
     }
 }
 
+/**
+ * @brief Execute a load instruction.
+ *
+ * @param instr The decoded I-Type instruction.
+ */
 void CPU::execute_load(const IType& instr) {
     int32_t sign_extended_imm = static_cast<int32_t>(instr.imm);
     uint32_t address = registers[instr.rs1] + sign_extended_imm;
@@ -204,6 +223,11 @@ void CPU::execute_load(const IType& instr) {
     }
 }
 
+/**
+ * @brief Execute an ALU instruction.
+ *
+ * @param instr The decoded I-Type instruction.
+ */
 void CPU::execute_alu(const IType& instr) {
     LOG_DEBUG("Executing ALU instruction");
     switch (static_cast<Funct3>(instr.funct3)) {
@@ -211,12 +235,50 @@ void CPU::execute_alu(const IType& instr) {
             registers[instr.rd] = registers[instr.rs1] + instr.imm;
             LOG_DEBUG("Executed ADDI: x" + std::to_string(instr.rd) + " = x" + std::to_string(instr.rs1) + " + " + std::to_string(instr.imm));
             break;
+        case Funct3::SLL:
+            registers[instr.rd] = registers[instr.rs1] << (instr.imm & 0x1F);
+            LOG_DEBUG("Executed SLLI: x" + std::to_string(instr.rd) + " = x" + std::to_string(instr.rs1) + " << " + std::to_string(instr.imm & 0x1F));
+            break;
+        case Funct3::SLT:
+            registers[instr.rd] = (int32_t)registers[instr.rs1] < (int32_t)instr.imm ? 1 : 0;
+            LOG_DEBUG("Executed SLTI: x" + std::to_string(instr.rd) + " = x" + std::to_string(instr.rs1) + " < " + std::to_string(instr.imm));
+            break;
+        case Funct3::SLTU:
+            registers[instr.rd] = registers[instr.rs1] < (uint32_t)instr.imm ? 1 : 0;
+            LOG_DEBUG("Executed SLTIU: x" + std::to_string(instr.rd) + " = x" + std::to_string(instr.rs1) + " < " + std::to_string(instr.imm));
+            break;
+        case Funct3::XOR:
+            registers[instr.rd] = registers[instr.rs1] ^ instr.imm;
+            LOG_DEBUG("Executed XORI: x" + std::to_string(instr.rd) + " = x" + std::to_string(instr.rs1) + " ^ " + std::to_string(instr.imm));
+            break;
+        case Funct3::SRL_SRA:
+            if ((instr.imm & 0x40000000) == 0) {
+                registers[instr.rd] = registers[instr.rs1] >> (instr.imm & 0x1F);
+                LOG_DEBUG("Executed SRLI: x" + std::to_string(instr.rd) + " = x" + std::to_string(instr.rs1) + " >> " + std::to_string(instr.imm & 0x1F));
+            } else {
+                registers[instr.rd] = (int32_t)registers[instr.rs1] >> (instr.imm & 0x1F);
+                LOG_DEBUG("Executed SRAI: x" + std::to_string(instr.rd) + " = (int32_t)x" + std::to_string(instr.rs1) + " >> " + std::to_string(instr.imm & 0x1F));
+            }
+            break;
+        case Funct3::OR:
+            registers[instr.rd] = registers[instr.rs1] | instr.imm;
+            LOG_DEBUG("Executed ORI: x" + std::to_string(instr.rd) + " = x" + std::to_string(instr.rs1) + " | " + std::to_string(instr.imm));
+            break;
+        case Funct3::AND:
+            registers[instr.rd] = registers[instr.rs1] & instr.imm;
+            LOG_DEBUG("Executed ANDI: x" + std::to_string(instr.rd) + " = x" + std::to_string(instr.rs1) + " & " + std::to_string(instr.imm));
+            break;
         default:
             LOG_ERROR("Unsupported ALU function! Funct3: " + std::to_string(instr.funct3));
             std::cerr << "Unsupported ALU function! Funct3: " << +instr.funct3 << std::endl;
     }
 }
 
+/**
+ * @brief Execute a store instruction.
+ *
+ * @param instr The decoded S-Type instruction.
+ */
 void CPU::execute_store(const SType& instr) {
     uint32_t address = registers[instr.rs1] + instr.imm;
     LOG_DEBUG("Executing store instruction at address: 0x" + Memory::to_hex_string(address));
@@ -239,6 +301,11 @@ void CPU::execute_store(const SType& instr) {
     }
 }
 
+/**
+ * @brief Execute an R-Type instruction.
+ *
+ * @param instr The decoded R-Type instruction.
+ */
 void CPU::execute_r_type(const RType& instr) {
     LOG_DEBUG("Executing R-Type instruction");
     switch (static_cast<Funct3>(instr.funct3)) {
@@ -251,12 +318,50 @@ void CPU::execute_r_type(const RType& instr) {
                 LOG_DEBUG("Executed SUB: x" + std::to_string(instr.rd) + " = x" + std::to_string(instr.rs1) + " - x" + std::to_string(instr.rs2));
             }
             break;
+        case Funct3::SLL:
+            registers[instr.rd] = registers[instr.rs1] << (registers[instr.rs2] & 0x1F);
+            LOG_DEBUG("Executed SLL: x" + std::to_string(instr.rd) + " = x" + std::to_string(instr.rs1) + " << " + std::to_string(registers[instr.rs2] & 0x1F));
+            break;
+        case Funct3::SLT:
+            registers[instr.rd] = (int32_t)registers[instr.rs1] < (int32_t)registers[instr.rs2] ? 1 : 0;
+            LOG_DEBUG("Executed SLT: x" + std::to_string(instr.rd) + " = x" + std::to_string(instr.rs1) + " < x" + std::to_string(instr.rs2));
+            break;
+        case Funct3::SLTU:
+            registers[instr.rd] = registers[instr.rs1] < registers[instr.rs2] ? 1 : 0;
+            LOG_DEBUG("Executed SLTU: x" + std::to_string(instr.rd) + " = x" + std::to_string(instr.rs1) + " < x" + std::to_string(instr.rs2));
+            break;
+        case Funct3::XOR:
+            registers[instr.rd] = registers[instr.rs1] ^ registers[instr.rs2];
+            LOG_DEBUG("Executed XOR: x" + std::to_string(instr.rd) + " = x" + std::to_string(instr.rs1) + " ^ x" + std::to_string(instr.rs2));
+            break;
+        case Funct3::SRL_SRA:
+            if (instr.funct7 == 0x00) { // SRL
+                registers[instr.rd] = registers[instr.rs1] >> (registers[instr.rs2] & 0x1F);
+                LOG_DEBUG("Executed SRL: x" + std::to_string(instr.rd) + " = x" + std::to_string(instr.rs1) + " >> " + std::to_string(registers[instr.rs2] & 0x1F));
+            } else if (instr.funct7 == 0x20) { // SRA
+                registers[instr.rd] = (int32_t)registers[instr.rs1] >> (registers[instr.rs2] & 0x1F);
+                LOG_DEBUG("Executed SRA: x" + std::to_string(instr.rd) + " = (int32_t)x" + std::to_string(instr.rs1) + " >> " + std::to_string(registers[instr.rs2] & 0x1F));
+            }
+            break;
+        case Funct3::OR:
+            registers[instr.rd] = registers[instr.rs1] | registers[instr.rs2];
+            LOG_DEBUG("Executed OR: x" + std::to_string(instr.rd) + " = x" + std::to_string(instr.rs1) + " | x" + std::to_string(instr.rs2));
+            break;
+        case Funct3::AND:
+            registers[instr.rd] = registers[instr.rs1] & registers[instr.rs2];
+            LOG_DEBUG("Executed AND: x" + std::to_string(instr.rd) + " = x" + std::to_string(instr.rs1) + " & x" + std::to_string(instr.rs2));
+            break;
         default:
             LOG_ERROR("Unsupported R-Type function!");
             std::cerr << "Unsupported R-Type function!" << std::endl;
     }
 }
 
+/**
+ * @brief Execute a B-Type instruction.
+ *
+ * @param instr The decoded B-Type instruction.
+ */
 void CPU::execute_b_type(const BType& instr) {
     uint32_t target = pc + instr.imm;
     LOG_DEBUG("Executing B-Type instruction with target address: 0x" + Memory::to_hex_string(target));
@@ -280,6 +385,11 @@ void CPU::execute_b_type(const BType& instr) {
     }
 }
 
+/**
+ * @brief Execute a J-Type instruction.
+ *
+ * @param instr The decoded J-Type instruction.
+ */
 void CPU::execute_j_type(const JType& instr) {
     LOG_DEBUG("Executing J-Type instruction");
     registers[instr.rd] = pc + 4;
@@ -287,16 +397,29 @@ void CPU::execute_j_type(const JType& instr) {
     LOG_DEBUG("Executed JAL: x" + std::to_string(instr.rd) + " = 0x" + Memory::to_hex_string(pc));
 }
 
+/**
+ * @brief Set the program counter.
+ *
+ * @param address The address to set the program counter to.
+ */
 void CPU::set_pc(uint32_t address) {
     pc = address;
     LOG_DEBUG("Program counter set to: 0x" + Memory::to_hex_string(pc));
 }
 
+/**
+ * @brief Set the stack pointer.
+ *
+ * @param address The address to set the stack pointer to.
+ */
 void CPU::set_sp(uint32_t address) {
     registers[2] = address;
     LOG_DEBUG("Stack pointer set to: 0x" + Memory::to_hex_string(registers[2]));
 }
 
+/**
+ * @brief Print the CPU registers.
+ */
 void CPU::print_registers() const {
     std::cout << "PC: 0x" << std::hex << pc;
     for (int i = 0; i < 32; ++i) {
