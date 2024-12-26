@@ -29,11 +29,9 @@ struct MemoryLayout {
 class Memory {
 public:
     Memory(size_t size);
-    bool load_from_file(const std::string& filename); // Updated function to return success status
     bool load_from_elf(const std::string& filename); // New function to load binary files
     bool load_from_disassembled(const std::string& filename); // Updated function to return success status
     bool load_from_map(const std::string& map_file); // New function to load memory layout from map file
-    bool load_from_binary(const std::string& filename); // Add this line
     uint8_t load_byte(uint32_t address) const;
     uint16_t load_half_word(uint32_t address) const;
     uint32_t load_word(uint32_t address) const;

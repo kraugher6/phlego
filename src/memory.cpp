@@ -10,63 +10,6 @@ Memory::Memory(size_t size) : data(size), initial_address(0) {
     LOG_DEBUG("Memory initialized with size: " + std::to_string(size) + " bytes.");
 }
 
-bool Memory::load_from_file(const std::string& filename) {
-    std::ifstream file(filename);
-    if (!file) {
-        LOG_ERROR("Could not open file " + filename);
-        return false;
-    }
-
-    std::string line;
-    LOG_DEBUG("Loading instructions from: " + filename);
-    size_t address = 0;
-    while (std::getline(file, line)) {
-        std::istringstream iss(line);
-        uint32_t instruction;
-        if (!(iss >> std::hex >> instruction)) {
-            LOG_ERROR("Invalid instruction format in line: " + line);
-            continue; // Skip invalid lines
-        }
-
-        if (address + 4 > data.size()) {
-            LOG_ERROR("Memory overflow while loading instructions");
-            return false;
-        }
-
-        store_word(address, instruction);
-        address += 4;
-    }
-
-    return true;
-}
-
-bool Memory::load_from_binary(const std::string& filename) {
-    std::ifstream file(filename, std::ios::binary);
-    if (!file) {
-        LOG_ERROR("Could not open binary file " + filename);
-        return false;
-    }
-
-    size_t address = 0;
-    uint32_t instruction;
-    while (file.read(reinterpret_cast<char*>(&instruction), sizeof(instruction))) {
-        if (address + 4 > data.size()) {
-            LOG_ERROR("Memory overflow while loading binary");
-            return false;
-        }
-
-        store_word(address, instruction);
-        address += 4;
-    }
-
-    if (file.gcount() != 0) {
-        LOG_ERROR("Incomplete instruction read from binary file");
-        return false;
-    }
-
-    return true;
-}
-
 bool Memory::load_from_elf(const std::string& filename) {
     LOG_DEBUG("Loading ELF file: " + filename);
     // ...existing code...
