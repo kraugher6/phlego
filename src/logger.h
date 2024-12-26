@@ -32,8 +32,20 @@
 #define LOG_DEBUG(message)
 #endif
 
+/**
+ * @brief Class for logging messages.
+ */
 class Logger {
 public:
+    /**
+     * @brief Log a message.
+     *
+     * @param level The log level (e.g., "DEBUG", "INFO", "ERROR").
+     * @param message The message to log.
+     * @param function The function name where the log is called.
+     * @param file The file name where the log is called.
+     * @param line The line number where the log is called.
+     */
     static void log(const std::string& level, const std::string& message, const std::string& function, const std::string& file, int line) {
         std::cerr << "[" << level << "] " << file << ":" << line << " (" << function << ") - " << message << std::endl;
     }

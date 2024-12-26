@@ -3,6 +3,13 @@
 #include "memory.h"
 #include "logger.h"
 
+/**
+ * @brief Main function to run the emulator.
+ *
+ * @param argc Argument count.
+ * @param argv Argument vector.
+ * @return int Exit status.
+ */
 int main(int argc, char* argv[]) {
     if (argc != 3) {
         LOG_ERROR("Usage: emulator <log_level> <path_to_elf> <path_to_disassembled>");

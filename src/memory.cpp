@@ -6,16 +6,33 @@
 #include <cstring>
 #include <regex>
 
+/**
+ * @brief Construct a new Memory object.
+ *
+ * @param size Size of the memory.
+ */
 Memory::Memory(size_t size) : data(size), initial_address(0) {
     LOG_DEBUG("Memory initialized with size: " + std::to_string(size) + " bytes.");
 }
 
+/**
+ * @brief Load memory layout from an ELF file.
+ *
+ * @param filename Path to the ELF file.
+ * @return true if successful, false otherwise.
+ */
 bool Memory::load_from_elf(const std::string& filename) {
     LOG_DEBUG("Loading ELF file: " + filename);
     // ...existing code...
     return true;
 }
 
+/**
+ * @brief Load instructions from a disassembled file.
+ *
+ * @param filename Path to the disassembled file.
+ * @return true if successful, false otherwise.
+ */
 bool Memory::load_from_disassembled(const std::string& filename) {
     std::ifstream file(filename);
     std::string line;
@@ -72,6 +89,12 @@ bool Memory::load_from_disassembled(const std::string& filename) {
     return true;
 }
 
+/**
+ * @brief Load memory layout from a map file.
+ *
+ * @param map_file Path to the map file.
+ * @return true if successful, false otherwise.
+ */
 bool Memory::load_from_map(const std::string& map_file) {
     std::ifstream file(map_file);
     if (!file.is_open()) {
@@ -110,36 +133,82 @@ bool Memory::load_from_map(const std::string& map_file) {
     return true;
 }
 
+/**
+ * @brief Get the initial address read from the disassembled file.
+ *
+ * @return uint32_t The initial address.
+ */
 uint32_t Memory::get_initial_address() const {
     return initial_address;
 }
 
+/**
+ * @brief Get the stack pointer address.
+ *
+ * @return uint32_t The stack pointer address.
+ */
 uint32_t Memory::get_stack_pointer() const {
     // return layout.stack_start + layout.stack_size; // Stack pointer initialized to the top of the stack
     return 0x10000; // Stack pointer initialized to 0x10000
 }
 
+/**
+ * @brief Load a byte from memory.
+ *
+ * @param address Address to load from.
+ * @return uint8_t The loaded byte.
+ */
 uint8_t Memory::load_byte(uint32_t address) const {
     return data[address];
 }
 
+/**
+ * @brief Load a half word from memory.
+ *
+ * @param address Address to load from.
+ * @return uint16_t The loaded half word.
+ */
 uint16_t Memory::load_half_word(uint32_t address) const {
     return (data[address] << 8) | data[address + 1];
 }
 
+/**
+ * @brief Load a word from memory.
+ *
+ * @param address Address to load from.
+ * @return uint32_t The loaded word.
+ */
 uint32_t Memory::load_word(uint32_t address) const {
     return (data[address] << 24) | (data[address + 1] << 16) | (data[address + 2] << 8) | data[address + 3];
 }
 
+/**
+ * @brief Store a byte in memory.
+ *
+ * @param address Address to store at.
+ * @param value The byte to store.
+ */
 void Memory::store_byte(uint32_t address, uint8_t value) {
     data[address] = value;
 }
 
+/**
+ * @brief Store a half word in memory.
+ *
+ * @param address Address to store at.
+ * @param value The half word to store.
+ */
 void Memory::store_half_word(uint32_t address, uint16_t value) {
     data[address] = value >> 8;
     data[address + 1] = value & 0xFF;
 }
 
+/**
+ * @brief Store a word in memory.
+ *
+ * @param address Address to store at.
+ * @param value The word to store.
+ */
 void Memory::store_word(uint32_t address, uint32_t value) {
     data[address] = value >> 24;
     data[address + 1] = (value >> 16) & 0xFF;
@@ -147,6 +216,12 @@ void Memory::store_word(uint32_t address, uint32_t value) {
     data[address + 3] = value & 0xFF;
 }
 
+/**
+ * @brief Print the memory contents.
+ *
+ * @param start_address Start address of the memory region to print.
+ * @param end_address End address of the memory region to print.
+ */
 void Memory::print_memory(uint32_t start_address, uint32_t end_address) const {
     std::cout << "Memory state (0x" << std::hex << start_address << " - 0x" << end_address << "):" << std::endl;
     for (uint32_t addr = start_address; addr < end_address; addr += 4) {
@@ -155,6 +230,12 @@ void Memory::print_memory(uint32_t start_address, uint32_t end_address) const {
     }
 }
 
+/**
+ * @brief Convert a value to a hexadecimal string.
+ *
+ * @param value The value to convert.
+ * @return std::string The hexadecimal string.
+ */
 std::string Memory::to_hex_string(uint32_t value) {
     std::stringstream ss;
     ss << std::hex << value;
