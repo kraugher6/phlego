@@ -1,6 +1,8 @@
 # Variabili di configurazione
 RISCV_GCC = riscv64-unknown-elf-gcc
 GCC_FLAGS = -march=rv32i -mabi=ilp32 -nostartfiles -I/usr/lib/gcc/riscv64-unknown-elf/10.2.0/include
+RISCV_OBJDUMP = riscv64-unknown-elf-objdump
+OBJDUMP_FLAGS = -D --section=.text
 SRC_DIR = src
 BUILD_DIR = build
 BIN_DIR = bin
@@ -35,7 +37,7 @@ $(BUILD_DIR)/main.o: $(SRC_DIR)/main.cpp $(SRC_DIR)/cpu.h $(SRC_DIR)/memory.h | 
 tests: $(TEST_SRC)
 	$(RISCV_GCC) $(GCC_FLAGS) -S $(TEST_SRC) -o $(TEST_OUT_S)
 	$(RISCV_GCC) $(GCC_FLAGS) -Wl,-Map=$(TEST_OUT_MAP) -o $(TEST_OUT_BIN) $(TEST_SRC)
-	riscv64-unknown-elf-objdump -D --section=.text $(TEST_OUT_BIN) > $(TEXT_SECTION_DIS)
+	$(RISCV_OBJDUMP) $(OBJDUMP_FLAGS) $(TEST_OUT_BIN) > $(TEXT_SECTION_DIS)
 
 # Directory necessarie
 $(BUILD_DIR):
