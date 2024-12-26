@@ -11,6 +11,9 @@ TEST_OUT_BIN = $(TEST_DIR)/simple_program.bin
 TEST_OUT_MAP = $(TEST_DIR)/simple_program.map
 TEXT_SECTION_DIS = $(TEST_DIR)/simple_program.dis
 
+# Set the logging level (DEBUG, INFO, ERROR)
+LOG_LEVEL ?= LOG_LEVEL_DEBUG
+
 # Obiettivi principali
 all: $(BIN_DIR)/emulator
 
@@ -20,13 +23,13 @@ $(BIN_DIR)/emulator: $(BUILD_DIR)/cpu.o $(BUILD_DIR)/memory.o $(BUILD_DIR)/main.
 
 # Regole per compilare i file sorgenti
 $(BUILD_DIR)/cpu.o: $(SRC_DIR)/cpu.cpp $(SRC_DIR)/cpu.h | $(BUILD_DIR)
-	g++ -Wall -Wextra -std=c++17 -c $(SRC_DIR)/cpu.cpp -o $(BUILD_DIR)/cpu.o
+	g++ -Wall -Wextra -std=c++17 -DLOG_LEVEL=$(LOG_LEVEL) -c $(SRC_DIR)/cpu.cpp -o $(BUILD_DIR)/cpu.o
 
 $(BUILD_DIR)/memory.o: $(SRC_DIR)/memory.cpp $(SRC_DIR)/memory.h | $(BUILD_DIR)
-	g++ -Wall -Wextra -std=c++17 -c $(SRC_DIR)/memory.cpp -o $(BUILD_DIR)/memory.o
+	g++ -Wall -Wextra -std=c++17 -DLOG_LEVEL=$(LOG_LEVEL) -c $(SRC_DIR)/memory.cpp -o $(BUILD_DIR)/memory.o
 
 $(BUILD_DIR)/main.o: $(SRC_DIR)/main.cpp $(SRC_DIR)/cpu.h $(SRC_DIR)/memory.h | $(BUILD_DIR)
-	g++ -Wall -Wextra -std=c++17 -c $(SRC_DIR)/main.cpp -o $(BUILD_DIR)/main.o
+	g++ -Wall -Wextra -std=c++17 -DLOG_LEVEL=$(LOG_LEVEL) -c $(SRC_DIR)/main.cpp -o $(BUILD_DIR)/main.o
 
 # Regola per generare il file .s da un programma di test
 tests: $(TEST_SRC)
