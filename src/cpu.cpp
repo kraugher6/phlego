@@ -13,11 +13,6 @@ CPU::CPU(Memory& memory) : memory(memory), pc(0) {
     for (auto& reg : registers) {
         reg = 0;
     }
-
-    // Initialize stack pointer with the address read from the ELF file
-    registers[2] = memory.get_stack_pointer();
-
-    LOG_INFO("CPU initialized with stack pointer set to: 0x" + Memory::to_hex_string(registers[2]));
 }
 
 /**

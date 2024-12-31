@@ -11,7 +11,7 @@
  * @return int Exit status.
  */
 int main(int argc, char* argv[]) {
-    if (argc != 3) {
+    if (argc != 2) {
         LOG_ERROR("Usage: emulator <log_level> <path_to_elf> <path_to_disassembled>");
         return 1;
     }
@@ -19,7 +19,12 @@ int main(int argc, char* argv[]) {
     Memory memory(1024 * 1024); // 1 MB of memory
     CPU cpu(memory);
 
-    if (!memory.load_from_map(argv[1])) {
+    // if (!memory.load_from_map(argv[1])) {
+    //     LOG_ERROR("Failed to load ELF file: " + std::string(argv[2]));
+    //     return 1;
+    // }
+
+    if (!memory.load_from_elf(argv[1])) {
         LOG_ERROR("Failed to load ELF file: " + std::string(argv[2]));
         return 1;
     }
@@ -27,10 +32,10 @@ int main(int argc, char* argv[]) {
     // Set the stack pointer after loading the ELF file
     cpu.set_sp(memory.get_stack_pointer());
 
-    if (!memory.load_from_disassembled(argv[2])) {
-        LOG_ERROR("Failed to load disassembled file: " + std::string(argv[3]));
-        return 1;
-    }
+    // if (!memory.load_from_disassembled(argv[2])) {
+    //     LOG_ERROR("Failed to load disassembled file: " + std::string(argv[3]));
+    //     return 1;
+    // }
 
     // Set the program counter to the initial address read from the disassembled file
     cpu.set_pc(memory.get_initial_address());

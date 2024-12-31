@@ -5,6 +5,7 @@
 #include <vector>
 #include <cstddef> // Necessary for size_t type
 #include <iostream> // Necessary for std::cout and std::hex
+#include <elfio/elfio.hpp>
 
 /**
  * @brief Struct representing the memory layout.

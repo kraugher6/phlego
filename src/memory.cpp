@@ -5,6 +5,21 @@
 #include <sstream>
 #include <cstring>
 #include <regex>
+#include <elfio/elfio.hpp>
+
+// Function to convert data based on endianness
+uint32_t convert_endianness(uint32_t value, ELFIO::elfio& reader) {
+    if (reader.get_encoding() == ELFIO::ELFDATA2LSB) {
+        // Little-endian, no conversion needed
+        return value;
+    } else {
+        // Big-endian, convert to little-endian
+        return ((value >> 24) & 0x000000FF) |
+               ((value >> 8) & 0x0000FF00) |
+               ((value << 8) & 0x00FF0000) |
+               ((value << 24) & 0xFF000000);
+    }
+}
 
 /**
  * @brief Construct a new Memory object.
@@ -23,7 +38,65 @@ Memory::Memory(size_t size) : data(size), initial_address(0) {
  */
 bool Memory::load_from_elf(const std::string& filename) {
     LOG_DEBUG("Loading ELF file: " + filename);
-    // ...existing code...
+    ELFIO::elfio reader;
+
+    if (!reader.load(filename)) {
+        LOG_ERROR("Error: Failed to open ELF file: " + filename);
+        return false;
+    }
+
+    // Inizializza il layout della memoria
+    for (const auto& segment : reader.segments) {
+        if (segment->get_type() == ELFIO::PT_LOAD) {
+            uint32_t vaddr = static_cast<uint32_t>(segment->get_virtual_address());
+            uint32_t mem_size = static_cast<uint32_t>(segment->get_memory_size());
+
+            if (vaddr < layout.data_start || layout.data_start == 0) {
+                layout.text_start = vaddr;
+                layout.text_size = mem_size;
+            } else if (vaddr >= layout.data_start) {
+                layout.data_start = vaddr;
+                layout.data_size = mem_size;
+            }
+        }
+    }
+
+    // Ottieni il punto di ingresso
+    initial_address = static_cast<uint32_t>(reader.get_entry());
+
+    // Stack pointer: read from ELF if available
+    for (const auto& segment : reader.segments) {
+        if (segment->get_type() == ELFIO::PT_GNU_STACK) {
+            layout.stack_start = static_cast<uint32_t>(segment->get_virtual_address());
+            layout.stack_size = static_cast<uint32_t>(segment->get_memory_size());
+            break;
+        }
+    }
+
+    // Default stack pointer if not specified in ELF
+    if (layout.stack_start == 0) {
+        LOG_INFO("Stack pointer not found in ELF file. Using default stack layout.");
+        layout.stack_start = 0x10000;   // Default per ora
+        layout.stack_size = 0x1000;      // Default
+    }
+
+    // Carica le istruzioni nella memoria
+    for (const auto& section : reader.sections) {
+        if (section->get_name() == ".text") {
+            uint32_t vaddr = static_cast<uint32_t>(section->get_address());
+            const char* data_ptr = section->get_data();
+            size_t size = section->get_size();
+
+            for (size_t i = 0; i < size; i += 4) {
+                uint32_t instruction = *reinterpret_cast<const uint32_t*>(data_ptr + i);
+                instruction = convert_endianness(instruction, reader);
+                // Store the instruction in memory
+                store_word(vaddr + i, instruction);
+            }
+        }
+    }
+
+    LOG_DEBUG("ELF file loaded successfully: " + filename);
     return true;
 }
 
@@ -139,6 +212,7 @@ bool Memory::load_from_map(const std::string& map_file) {
  * @return uint32_t The initial address.
  */
 uint32_t Memory::get_initial_address() const {
+    LOG_INFO("CPU initialized with program counter set to: 0x" + Memory::to_hex_string(initial_address));
     return initial_address;
 }
 
@@ -148,8 +222,10 @@ uint32_t Memory::get_initial_address() const {
  * @return uint32_t The stack pointer address.
  */
 uint32_t Memory::get_stack_pointer() const {
-    // return layout.stack_start + layout.stack_size; // Stack pointer initialized to the top of the stack
-    return 0x10000; // Stack pointer initialized to 0x10000
+    uint32_t sp = layout.stack_start + layout.stack_size;
+    LOG_INFO("CPU initialized with stack pointer set to: 0x" + Memory::to_hex_string(sp));
+    return sp; // Stack pointer initialized to the top of the stack
+    // return 0x10000; // Stack pointer initialized to 0x10000
 }
 
 /**
