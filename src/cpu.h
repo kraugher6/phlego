@@ -5,58 +5,99 @@
 #include <variant>
 
 /**
- * @brief Struct for R-Type instructions.
+ * @brief Enum for R-Type funct3 values.
  */
-struct RType {
-    uint8_t funct3; ///< Function 3 field
-    uint8_t funct7; ///< Function 7 field
-    uint8_t rd;     ///< Destination register
-    uint8_t rs1;    ///< Source register 1
-    uint8_t rs2;    ///< Source register 2
+enum class RTypeFunct3 : uint8_t {
+    ADD = 0x0,
+    SUB = 0x0,
+    SLL = 0x1,
+    SLT = 0x2,
+    SLTU = 0x3,
+    XOR = 0x4,
+    SRL = 0x5,
+    SRA = 0x5,
+    OR = 0x6,
+    AND = 0x7,
+    MUL = 0x0,
+    MULH = 0x1,
+    MULHSU = 0x2,
+    MULHU = 0x3,
+    DIV = 0x4,
+    DIVU = 0x5,
+    REM = 0x6,
+    REMU = 0x7
 };
 
 /**
- * @brief Struct for I-Type instructions.
+ * @brief Enum for I-Type funct3 values.
  */
-struct IType {
-    uint8_t funct3; ///< Function 3 field
-    uint8_t rd;     ///< Destination register
-    uint8_t rs1;    ///< Source register 1
-    int32_t imm;    ///< Immediate value
+enum class ITypeFunct3 : uint8_t {
+    ADDI = 0x0,
+    SLTI = 0x2,
+    SLTIU = 0x3,
+    XORI = 0x4,
+    ORI = 0x6,
+    ANDI = 0x7,
+    SLLI = 0x1,
+    SRLI = 0x5,
+    SRAI = 0x5,
+    LB = 0x0,
+    LH = 0x1,
+    LW = 0x2,
+    LBU = 0x4,
+    LHU = 0x5
 };
 
 /**
- * @brief Struct for J-Type instructions.
+ * @brief Enum for S-Type funct3 values.
  */
-struct JType {
-    uint8_t rd;     ///< Destination register
-    int32_t imm;    ///< Immediate value
+enum class STypeFunct3 : uint8_t {
+    SB = 0x0,
+    SH = 0x1,
+    SW = 0x2
 };
 
 /**
- * @brief Struct for S-Type instructions.
+ * @brief Enum for B-Type funct3 values.
  */
-struct SType {
-    int32_t imm;    ///< Immediate value
-    uint8_t rs1;    ///< Source register 1
-    uint8_t rs2;    ///< Source register 2
-    uint8_t funct3; ///< Function 3 field
+enum class BTypeFunct3 : uint8_t {
+    BEQ = 0x0,
+    BNE = 0x1,
+    BLT = 0x4,
+    BGE = 0x5,
+    BLTU = 0x6,
+    BGEU = 0x7
 };
 
 /**
- * @brief Struct for B-Type instructions.
+ * @brief Enum for funct7 values.
  */
-struct BType {
-    int32_t imm;    ///< Immediate value
-    uint8_t rs1;    ///< Source register 1
-    uint8_t rs2;    ///< Source register 2
-    uint8_t funct3; ///< Function 3 field
+enum class Funct7 : uint8_t {
+    ADD = 0x00,
+    SUB = 0x20,
+    SLL = 0x00,
+    SLT = 0x00,
+    SLTU = 0x00,
+    XOR = 0x00,
+    SRL = 0x00,
+    SRA = 0x20,
+    OR = 0x00,
+    AND = 0x00,
+    MUL = 0x01,
+    MULH = 0x01,
+    MULHSU = 0x01,
+    MULHU = 0x01,
+    DIV = 0x01,
+    DIVU = 0x01,
+    REM = 0x01,
+    REMU = 0x01
 };
 
 /**
  * @brief Enum for opcodes.
  */
-enum class Opcode : uint8_t {
+enum class Opcode : uint8_t
+{
     R_TYPE = 0x33,
     I_TYPE_LOAD = 0x03,
     I_TYPE_ALU = 0x13,
@@ -67,51 +108,66 @@ enum class Opcode : uint8_t {
 };
 
 /**
- * @brief Enum for funct3 values.
+ * @brief Struct for R-Type instructions.
  */
-enum class Funct3 : uint8_t {
-    // R-Type and I-Type ALU
-    ADD_SUB = 0x0,
-    SLL = 0x1,
-    SLT = 0x2,
-    SLTU = 0x3,
-    XOR = 0x4,
-    SRL_SRA = 0x5,
-    OR = 0x6,
-    AND = 0x7,
+struct RType {
+    RTypeFunct3 funct3; ///< Function 3 field
+    Funct7 funct7; ///< Function 7 field
+    uint8_t rd;    ///< Destination register
+    uint8_t rs1;   ///< Source register 1
+    uint8_t rs2;   ///< Source register 2
+};
 
-    // I-Type Load
-    LB = 0x0,
-    LH = 0x1,
-    LW = 0x2,
-    LBU = 0x4,
-    LHU = 0x5,
+/**
+ * @brief Struct for I-Type instructions.
+ */
+struct IType {
+    ITypeFunct3 funct3; ///< Function 3 field
+    uint8_t rd;    ///< Destination register
+    uint8_t rs1;   ///< Source register 1
+    int32_t imm;   ///< Immediate value
+};
 
-    // S-Type
-    SB = 0x0,
-    SH = 0x1,
-    SW = 0x2,
+/**
+ * @brief Struct for J-Type instructions.
+ */
+struct JType {
+    uint8_t rd;  ///< Destination register
+    int32_t imm; ///< Immediate value
+};
 
-    // B-Type
-    BEQ = 0x0,
-    BNE = 0x1,
-    BLT = 0x4,
-    BGE = 0x5,
-    BLTU = 0x6,
-    BGEU = 0x7
+/**
+ * @brief Struct for S-Type instructions.
+ */
+struct SType {
+    STypeFunct3 funct3; ///< Function 3 field
+    uint8_t rs1;   ///< Source register 1
+    uint8_t rs2;   ///< Source register 2
+    int32_t imm;   ///< Immediate value
+};
+
+/**
+ * @brief Struct for B-Type instructions.
+ */
+struct BType {
+    BTypeFunct3 funct3; ///< Function 3 field
+    uint8_t rs1;   ///< Source register 1
+    uint8_t rs2;   ///< Source register 2
+    int32_t imm;   ///< Immediate value
 };
 
 /**
  * @brief Class representing the CPU.
  */
-class CPU {
+class CPU
+{
 public:
     /**
      * @brief Construct a new CPU object.
      *
      * @param memory Reference to the memory object.
      */
-    CPU(Memory& memory);
+    CPU(Memory &memory);
 
     /**
      * @brief Execute the fetch-decode-run cycle.
@@ -131,42 +187,42 @@ public:
      *
      * @param instr The decoded I-Type instruction.
      */
-    void execute_load(const IType& instr);
+    void execute_load(const IType &instr);
 
     /**
      * @brief Execute an ALU instruction.
      *
      * @param instr The decoded I-Type instruction.
      */
-    void execute_alu(const IType& instr);
+    void execute_alu(const IType &instr);
 
     /**
      * @brief Execute a store instruction.
      *
      * @param instr The decoded S-Type instruction.
      */
-    void execute_store(const SType& instr);
+    void execute_store(const SType &instr);
 
     /**
      * @brief Execute an R-Type instruction.
      *
      * @param instr The decoded R-Type instruction.
      */
-    void execute_r_type(const RType& instr);
+    void execute_r_type(const RType &instr);
 
     /**
      * @brief Execute a B-Type instruction.
      *
      * @param instr The decoded B-Type instruction.
      */
-    void execute_b_type(const BType& instr);
+    void execute_b_type(const BType &instr);
 
     /**
      * @brief Execute a J-Type instruction.
      *
      * @param instr The decoded J-Type instruction.
      */
-    void execute_j_type(const JType& instr);
+    void execute_j_type(const JType &instr);
 
     /**
      * @brief Set the program counter.
@@ -188,8 +244,8 @@ public:
     void print_registers() const;
 
 private:
-    Memory& memory; ///< Reference to the memory object.
-    uint32_t pc; ///< Program Counter.
+    Memory &memory;         ///< Reference to the memory object.
+    uint32_t pc;            ///< Program Counter.
     uint32_t registers[32]; ///< Registers.
 };
 

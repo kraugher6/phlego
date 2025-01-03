@@ -1,17 +1,7 @@
 # Variabili di configurazione
-RISCV_GCC = riscv64-unknown-elf-gcc
-RISCV_FLAGS = -march=rv32i -mabi=ilp32 -nostartfiles -I/usr/lib/gcc/riscv64-unknown-elf/10.2.0/include
-RISCV_OBJDUMP = riscv64-unknown-elf-objdump
-OBJDUMP_FLAGS = -D --section=.text
 SRC_DIR = src
 BUILD_DIR = build
 BIN_DIR = bin
-TEST_DIR = test
-TEST_SRC = $(TEST_DIR)/simple_program.cpp
-TEST_OUT_S = $(TEST_DIR)/simple_program.s
-TEST_OUT_BIN = $(TEST_DIR)/simple_program.bin
-TEST_OUT_MAP = $(TEST_DIR)/simple_program.map
-TEXT_SECTION_DIS = $(TEST_DIR)/simple_program.dis
 
 # Set the logging level (DEBUG, INFO, ERROR)
 LOG_LEVEL ?= LOG_LEVEL_INFO
@@ -32,12 +22,6 @@ $(BUILD_DIR)/memory.o: $(SRC_DIR)/memory.cpp $(SRC_DIR)/memory.h | $(BUILD_DIR)
 
 $(BUILD_DIR)/main.o: $(SRC_DIR)/main.cpp $(SRC_DIR)/cpu.h $(SRC_DIR)/memory.h | $(BUILD_DIR)
 	g++ -I/home/kraugher/Documents/officina/ELFIO -Wall -Wextra -std=c++17 -DLOG_LEVEL=$(LOG_LEVEL) -c $(SRC_DIR)/main.cpp -o $(BUILD_DIR)/main.o
-
-# Regola per generare il file .s da un programma di test
-tests: $(TEST_SRC)
-	$(RISCV_GCC) $(RISCV_FLAGS) -S $(TEST_SRC) -o $(TEST_OUT_S)
-	$(RISCV_GCC) $(RISCV_FLAGS) -Wl,-Map=$(TEST_OUT_MAP) -o $(TEST_OUT_BIN) $(TEST_SRC)
-	$(RISCV_OBJDUMP) $(OBJDUMP_FLAGS) $(TEST_OUT_BIN) > $(TEXT_SECTION_DIS)
 
 # Directory necessarie
 $(BUILD_DIR):
