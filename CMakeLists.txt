@@ -44,10 +44,10 @@ ExternalProject_Get_Property(ELFIO source_dir)
 include_directories(${source_dir})
 
 # Executable
-add_executable(emulator ${SOURCES})
+add_executable(phlego ${SOURCES})
 
 # Ensure ELFIO is downloaded before building the emulator
-add_dependencies(emulator ELFIO)
+add_dependencies(phlego ELFIO)
 
 # Compiler warnings
-target_compile_options(emulator PRIVATE -Wall -Wextra)
+target_compile_options(phlego PRIVATE -Wall -Wextra)

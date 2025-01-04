@@ -54,9 +54,10 @@ This project aims to create a robust and flexible RISC-V emulator with advanced 
 - g++17 compiler
 - Git
 
-### Prerequisites
+### Dependency
 
 - ELFIO library (https://github.com/serge1/ELFIO.git)
+- riscv-gnu-toolchain (https://github.com/riscv-collab/riscv-gnu-toolchain) to compile the tests
 
 ### Building the Project
 
@@ -85,3 +86,5 @@ To run tests, navigate to the appropriate test directory and use the provided Ma
 ```sh
 cd tests/rv32m
 make
+../../build/phlego rv32m.bin
+```
