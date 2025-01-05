@@ -4,47 +4,39 @@ This project aims to create a robust and flexible RISC-V emulator with advanced 
 
 ## Roadmap
 
-### 1. **Support Multiple ISAs**
-   - [x] Implement RV32IM.
-   - [ ] Add support for other extensions like RV64I, RV32A, RV32F/D, etc., with dynamic selection without recompilation.
+### 1. **Instruction Set Support**
+   - [x] Support for RV32I base integer instruction set.
+   - [x] Support for RV32M multiplication and division extension.
+   - [ ] Support for RV32F floating-point extension.
 
-### 2. **Pipeline and Performance Modeling**
-   - [ ] Simulate the behavior of pipelines and branch prediction to enable performance analysis.
+### 2. **Pipeline Implementation**
+   - [x] Five-stage pipeline: Fetch, Decode, Execute, Memory, Write-back.
+   - [ ] Hazard detection and forwarding mechanisms.
 
-### 3. **Debugging and Visualization**
-   - [ ] Integrate with debuggers like GDB and provide a GUI for interactive debugging of registers, memory, and pipeline stages.
+### 3. **Memory Management**
+   - [ ] Support for loading and storing data.
+   - [ ] Memory-mapped I/O support.
 
-### 4. **Peripheral Support**
-   - [ ] Add support for devices like UART, timers, and interrupt controllers.
+### 4. **Debugging and Profiling**
+   - [ ] Integrated debugging tools with breakpoints and step execution.
+   - [ ] Performance profiling and logging.
 
-### 5. **Cycle-Accurate Simulation**
-   - [ ] Provide a simulation model with cycle-accurate precision.
+### 5. **Simulation and Accuracy**
+   - [ ] Cycle-accurate simulation model.
+   - [ ] Accurate exception and interrupt handling.
 
 ### 6. **Performance Optimization**
-   - [ ] Optimize the emulator to handle large datasets and complex binaries efficiently.
+   - [ ] Optimized for handling large datasets and complex binaries efficiently.
 
 ### 7. **Multithreading and Parallelism**
-   - [ ] Implement support for multiple CPUs or parallel cores.
+   - [ ] Support for multiple CPUs or parallel cores.
 
 ### 8. **Compatibility and Toolchain Integration**
-   - [ ] Ensure compatibility with standard binaries and toolchains, integrating debugging, profiling, and tracing tools.
+   - [x] Compatibility with standard RISC-V binaries and toolchains.
+   - [ ] Integration with debugging, profiling, and tracing tools.
 
 ### 9. **Test Suite and Validation**
-   - [ ] Integrate official RISC-V test suites and benchmarks like SPEC CPU and CoreMark to validate and test the emulator.
-
-## Current Progress
-
-- Implemented RV32I.
-- Implemented RV32M
-- Next steps:
-  1. Expand ISA support.
-  2. Start validation and testing with official RISC-V test suites (Point 9).
-
-## Features
-
-- Modular design with extensible architecture.
-- Support for dynamic ISA selection (ongoing).
-- Plans for advanced debugging and visualization.
+   - [ ] Integration with official RISC-V test suites and benchmarks like SPEC CPU and CoreMark.
 
 ## Getting Started
 
