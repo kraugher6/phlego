@@ -235,6 +235,10 @@ uint32_t Memory::get_stack_pointer() const {
  * @return uint8_t The loaded byte.
  */
 uint8_t Memory::load_byte(uint32_t address) const {
+    if (address >= data.size()) {
+        LOG_ERROR("Memory load address out of range: 0x" + to_hex_string(address));
+        throw std::out_of_range("Memory load address out of range");
+    }
     return data[address];
 }
 
@@ -245,6 +249,10 @@ uint8_t Memory::load_byte(uint32_t address) const {
  * @return uint16_t The loaded half word.
  */
 uint16_t Memory::load_half_word(uint32_t address) const {
+    if (address + 1 >= data.size()) {
+        LOG_ERROR("Memory load address out of range: 0x" + to_hex_string(address));
+        throw std::out_of_range("Memory load address out of range");
+    }
     return (data[address] << 8) | data[address + 1];
 }
 
@@ -255,6 +263,10 @@ uint16_t Memory::load_half_word(uint32_t address) const {
  * @return uint32_t The loaded word.
  */
 uint32_t Memory::load_word(uint32_t address) const {
+    if (address + 3 >= data.size()) {
+        LOG_ERROR("Memory load address out of range: 0x" + to_hex_string(address));
+        throw std::out_of_range("Memory load address out of range");
+    }
     return (data[address] << 24) | (data[address + 1] << 16) | (data[address + 2] << 8) | data[address + 3];
 }
 
@@ -265,6 +277,10 @@ uint32_t Memory::load_word(uint32_t address) const {
  * @param value The byte to store.
  */
 void Memory::store_byte(uint32_t address, uint8_t value) {
+    if (address >= data.size()) {
+        LOG_ERROR("Memory store address out of range: 0x" + to_hex_string(address));
+        throw std::out_of_range("Memory store address out of range");
+    }
     data[address] = value;
 }
 
@@ -275,6 +291,10 @@ void Memory::store_byte(uint32_t address, uint8_t value) {
  * @param value The half word to store.
  */
 void Memory::store_half_word(uint32_t address, uint16_t value) {
+    if (address + 1 >= data.size()) {
+        LOG_ERROR("Memory store address out of range: 0x" + to_hex_string(address));
+        throw std::out_of_range("Memory store address out of range");
+    }
     data[address] = value >> 8;
     data[address + 1] = value & 0xFF;
 }
@@ -286,6 +306,10 @@ void Memory::store_half_word(uint32_t address, uint16_t value) {
  * @param value The word to store.
  */
 void Memory::store_word(uint32_t address, uint32_t value) {
+    if (address + 3 >= data.size()) {
+        LOG_ERROR("Memory store address out of range: 0x" + to_hex_string(address));
+        throw std::out_of_range("Memory store address out of range");
+    }
     data[address] = value >> 24;
     data[address + 1] = (value >> 16) & 0xFF;
     data[address + 2] = (value >> 8) & 0xFF;
