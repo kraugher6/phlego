@@ -7,7 +7,8 @@
 /**
  * @brief Enum for R-Type funct3 values.
  */
-enum class RTypeFunct3 : uint8_t {
+enum class RTypeFunct3 : uint8_t
+{
     ADD = 0x0,
     SUB = 0x0,
     SLL = 0x1,
@@ -31,7 +32,8 @@ enum class RTypeFunct3 : uint8_t {
 /**
  * @brief Enum for I-Type funct3 values.
  */
-enum class ITypeFunct3 : uint8_t {
+enum class ITypeFunct3 : uint8_t
+{
     ADDI = 0x0,
     SLTI = 0x2,
     SLTIU = 0x3,
@@ -51,7 +53,8 @@ enum class ITypeFunct3 : uint8_t {
 /**
  * @brief Enum for S-Type funct3 values.
  */
-enum class STypeFunct3 : uint8_t {
+enum class STypeFunct3 : uint8_t
+{
     SB = 0x0,
     SH = 0x1,
     SW = 0x2
@@ -60,7 +63,8 @@ enum class STypeFunct3 : uint8_t {
 /**
  * @brief Enum for B-Type funct3 values.
  */
-enum class BTypeFunct3 : uint8_t {
+enum class BTypeFunct3 : uint8_t
+{
     BEQ = 0x0,
     BNE = 0x1,
     BLT = 0x4,
@@ -72,7 +76,8 @@ enum class BTypeFunct3 : uint8_t {
 /**
  * @brief Enum for funct7 values.
  */
-enum class Funct7 : uint8_t {
+enum class Funct7 : uint8_t
+{
     ADD = 0x00,
     SUB = 0x20,
     SLL = 0x00,
@@ -110,28 +115,31 @@ enum class Opcode : uint8_t
 /**
  * @brief Struct for R-Type instructions.
  */
-struct RType {
+struct RType
+{
     RTypeFunct3 funct3; ///< Function 3 field
-    Funct7 funct7; ///< Function 7 field
-    uint8_t rd;    ///< Destination register
-    uint8_t rs1;   ///< Source register 1
-    uint8_t rs2;   ///< Source register 2
+    Funct7 funct7;      ///< Function 7 field
+    uint8_t rd;         ///< Destination register
+    uint8_t rs1;        ///< Source register 1
+    uint8_t rs2;        ///< Source register 2
 };
 
 /**
  * @brief Struct for I-Type instructions.
  */
-struct IType {
+struct IType
+{
     ITypeFunct3 funct3; ///< Function 3 field
-    uint8_t rd;    ///< Destination register
-    uint8_t rs1;   ///< Source register 1
-    int32_t imm;   ///< Immediate value
+    uint8_t rd;         ///< Destination register
+    uint8_t rs1;        ///< Source register 1
+    int32_t imm;        ///< Immediate value
 };
 
 /**
  * @brief Struct for J-Type instructions.
  */
-struct JType {
+struct JType
+{
     uint8_t rd;  ///< Destination register
     int32_t imm; ///< Immediate value
 };
@@ -139,21 +147,72 @@ struct JType {
 /**
  * @brief Struct for S-Type instructions.
  */
-struct SType {
+struct SType
+{
     STypeFunct3 funct3; ///< Function 3 field
-    uint8_t rs1;   ///< Source register 1
-    uint8_t rs2;   ///< Source register 2
-    int32_t imm;   ///< Immediate value
+    uint8_t rs1;        ///< Source register 1
+    uint8_t rs2;        ///< Source register 2
+    int32_t imm;        ///< Immediate value
 };
 
 /**
  * @brief Struct for B-Type instructions.
  */
-struct BType {
+struct BType
+{
     BTypeFunct3 funct3; ///< Function 3 field
-    uint8_t rs1;   ///< Source register 1
-    uint8_t rs2;   ///< Source register 2
-    int32_t imm;   ///< Immediate value
+    uint8_t rs1;        ///< Source register 1
+    uint8_t rs2;        ///< Source register 2
+    int32_t imm;        ///< Immediate value
+};
+
+// Pipeline stages
+struct FetchStage
+{
+    uint32_t instruction;
+    uint32_t pc;
+    bool valid = false;
+};
+
+struct DecodeStage
+{
+    std::variant<RType, IType, SType, BType, JType> decoded_instruction;
+    uint32_t pc;
+    bool valid = false;
+};
+
+struct ExecuteStage
+{
+    std::variant<RType, IType, SType, BType, JType> instruction;
+    uint32_t pc;
+    uint32_t alu_result;
+    bool valid = false;
+};
+
+struct MemoryStage
+{
+    std::variant<RType, IType, SType, BType, JType> instruction;
+    uint32_t pc;
+    uint32_t result;
+    bool valid = false;
+};
+
+struct WriteBackStage
+{
+    uint32_t pc;
+    uint32_t rd;
+    uint32_t result;
+    bool valid = false;
+};
+
+// Pipeline state
+struct Pipeline
+{
+    FetchStage fetch;
+    DecodeStage decode;
+    ExecuteStage execute;
+    MemoryStage memory;
+    WriteBackStage write_back;
 };
 
 /**
@@ -175,40 +234,61 @@ public:
     void run();
 
     /**
-     * @brief Decode an instruction.
+     * @brief Fetch the next instruction from memory.
      *
-     * @param instruction The instruction to decode.
-     * @return std::variant<RType, IType, SType, BType, JType> The decoded instruction.
+     * @param pipeline The pipeline state.
      */
-    std::variant<RType, IType, SType, BType, JType> decode(uint32_t instruction);
+    void fetch(Pipeline &pipeline);
 
     /**
-     * @brief Execute a load instruction.
+     * @brief Decode the fetched instruction.
      *
-     * @param instr The decoded I-Type instruction.
+     * @param pipeline The pipeline state.
      */
-    void execute_load(const IType &instr);
+    void decode(Pipeline &pipeline);
 
     /**
-     * @brief Execute an ALU instruction.
+     * @brief Execute the decoded instruction.
      *
+     * @param pipeline The pipeline state.
+     */
+    void execute(Pipeline &pipeline);
+
+    /**
+     * @brief Execute the memory stage.
+     *
+     * @param pipeline The pipeline state.
+     */
+    void mem(Pipeline &pipeline);
+
+    /**
+     * @brief Execute the write-back stage.
+     *
+     * @param pipeline The pipeline state.
+     */
+    void write_back(Pipeline &pipeline);
+
+    /**
+     * @brief Execute an I-Type ALU instruction.
+     *
+     * @param pipeline The pipeline state.
      * @param instr The decoded I-Type instruction.
      */
-    void execute_alu(const IType &instr);
+    uint32_t execute_i_type(const IType &instr);
 
     /**
      * @brief Execute a store instruction.
      *
      * @param instr The decoded S-Type instruction.
      */
-    void execute_store(const SType &instr);
+    void execute_s_type(const SType &instr);
 
     /**
      * @brief Execute an R-Type instruction.
      *
      * @param instr The decoded R-Type instruction.
      */
-    void execute_r_type(const RType &instr);
+    uint32_t execute_r_type(const RType &instr);
 
     /**
      * @brief Execute a B-Type instruction.
