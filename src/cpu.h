@@ -3,6 +3,8 @@
 
 #include "memory.h"
 #include <variant>
+#include <array>
+#include <iostream>
 
 /**
  * @brief Enum for R-Type funct3 values.
@@ -113,6 +115,17 @@ enum class Opcode : uint8_t
 };
 
 /**
+ * @brief Enum for register names.
+ */
+enum class RegisterName : uint8_t
+{
+    ZERO, RA, SP, GP, TP, T0, T1, T2,
+    S0, S1, A0, A1, A2, A3, A4, A5,
+    A6, A7, S2, S3, S4, S5, S6, S7,
+    S8, S9, S10, S11, T3, T4, T5, T6
+};
+
+/**
  * @brief Struct for R-Type instructions.
  */
 struct RType
@@ -213,6 +226,16 @@ struct Pipeline
     ExecuteStage execute;
     MemoryStage memory;
     WriteBackStage write_back;
+    bool stall = false; // Stall signal
+};
+
+/**
+ * @brief Struct representing a register with its value and name.
+ */
+struct Register
+{
+    uint32_t value;
+    RegisterName name;
 };
 
 /**
@@ -287,6 +310,7 @@ public:
      * @brief Execute an R-Type instruction.
      *
      * @param instr The decoded R-Type instruction.
+     * @return uint32_t The result of the ALU operation.
      */
     uint32_t execute_r_type(const RType &instr);
 
@@ -319,14 +343,22 @@ public:
     void set_sp(uint32_t address);
 
     /**
+     * @brief Check for data hazards and set stall signals.
+     *
+     * @param pipeline The pipeline state.
+     * @return true if a stall is needed, false otherwise.
+     */
+    bool detect_hazard(const Pipeline &pipeline);
+
+    /**
      * @brief Print the CPU registers.
      */
     void print_registers() const;
 
 private:
-    Memory &memory;         ///< Reference to the memory object.
-    uint32_t pc;            ///< Program Counter.
-    uint32_t registers[32]; ///< Registers.
+    Memory &memory;                     ///< Reference to the memory object.
+    uint32_t pc;                        ///< Program Counter.
+    std::array<Register, 32> registers; ///< Registers with names.
 };
 
 #endif

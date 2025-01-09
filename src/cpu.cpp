@@ -27,7 +27,7 @@ CPU::CPU(Memory &memory) : memory(memory), pc(0)
  */
 void CPU::fetch(Pipeline &pipeline)
 {
-    if (!pipeline.fetch.valid)
+    if (!pipeline.stall && !pipeline.fetch.valid)
     {
         pipeline.fetch.instruction = memory.load_word(pc);
         pipeline.fetch.pc = pc;
@@ -44,7 +44,7 @@ void CPU::fetch(Pipeline &pipeline)
  */
 void CPU::decode(Pipeline &pipeline)
 {
-    if (pipeline.fetch.valid)
+    if (!pipeline.stall && pipeline.fetch.valid)
     {
         uint32_t instruction = pipeline.fetch.instruction;
         if (instruction == 0)
@@ -190,7 +190,7 @@ void CPU::decode(Pipeline &pipeline)
  */
 void CPU::execute(Pipeline &pipeline)
 {
-    if (pipeline.decode.valid)
+    if (!pipeline.stall && pipeline.decode.valid)
     {
         auto &decoded = pipeline.decode.decoded_instruction;
         pipeline.execute.instruction = decoded;
@@ -201,6 +201,16 @@ void CPU::execute(Pipeline &pipeline)
         if (std::holds_alternative<RType>(decoded))
         {
             auto r_type = std::get<RType>(decoded);
+            // Forwarding logic
+            // if (pipeline.memory.valid && std::holds_alternative<RType>(pipeline.memory.instruction)) {
+            //     auto mem_r_type = std::get<RType>(pipeline.memory.instruction);
+            //     if (mem_r_type.rd == r_type.rs1) {
+            //         rs1_value = pipeline.memory.result;
+            //     }
+            //     if (mem_r_type.rd == r_type.rs2) {
+            //         rs2_value = pipeline.memory.result;
+            //     }
+            // }
             pipeline.execute.alu_result = execute_r_type(r_type);
         }
         else if (std::holds_alternative<IType>(decoded))
@@ -208,6 +218,13 @@ void CPU::execute(Pipeline &pipeline)
             auto i_type = std::get<IType>(decoded);
             if (static_cast<Opcode>(pipeline.fetch.instruction & 0x7F) == Opcode::I_TYPE_ALU)
             {
+                // Forwarding logic
+                // if (pipeline.memory.valid && std::holds_alternative<RType>(pipeline.memory.instruction)) {
+                //     auto mem_r_type = std::get<RType>(pipeline.memory.instruction);
+                //     if (mem_r_type.rd == i_type.rs1) {
+                //         rs1_value = pipeline.memory.result;
+                //     }
+                // }
                 pipeline.execute.alu_result = execute_i_type(i_type);
             }
             else
@@ -311,7 +328,7 @@ uint32_t CPU::execute_i_type(const IType &instr)
  */
 void CPU::mem(Pipeline &pipeline)
 {
-    if (pipeline.execute.valid)
+    if (!pipeline.stall && pipeline.execute.valid)
     {
         auto &instr = pipeline.execute.instruction;
         pipeline.memory.instruction = instr;
@@ -381,20 +398,30 @@ void CPU::run()
 
     while (true)
     {
-        // Fetch stage
-        fetch(pipeline);
+        // Check for hazards and set stall signal
+        pipeline.stall = detect_hazard(pipeline);
 
-        // Decode stage
-        decode(pipeline);
+        if (!pipeline.stall)
+        {
+            // Fetch stage
+            fetch(pipeline);
 
-        // Execute stage
-        execute(pipeline);
+            // Decode stage
+            decode(pipeline);
 
-        // Memory stage
-        mem(pipeline);
+            // Execute stage
+            execute(pipeline);
 
-        // Write-back stage
-        write_back(pipeline);
+            // Memory stage
+            mem(pipeline);
+
+            // Write-back stage
+            write_back(pipeline);
+        }
+        else
+        {
+            LOG_INFO("Stall detected. Pipeline stages are stalled.");
+        }
 
         // Check for the ret instruction (0x00008067)
         if (pipeline.fetch.instruction == 0x00008067)
@@ -650,6 +677,48 @@ void CPU::set_sp(uint32_t address)
 {
     registers[2] = address;
     LOG_DEBUG("Stack pointer set to: 0x" + Memory::to_hex_string(registers[2]));
+}
+
+/**
+ * @brief Check for data hazards and set stall signals.
+ *
+ * @param pipeline The pipeline state.
+ * @return true if a stall is needed, false otherwise.
+ */
+bool CPU::detect_hazard(const Pipeline &pipeline)
+{
+    if (pipeline.decode.valid)
+    {
+        auto &decoded = pipeline.decode.decoded_instruction;
+        uint32_t rs1 = 0, rs2 = 0;
+
+        if (std::holds_alternative<RType>(decoded))
+        {
+            auto r_type = std::get<RType>(decoded);
+            rs1 = r_type.rs1;
+            rs2 = r_type.rs2;
+        }
+        else if (std::holds_alternative<IType>(decoded))
+        {
+            auto i_type = std::get<IType>(decoded);
+            rs1 = i_type.rs1;
+        }
+
+        if (pipeline.execute.valid)
+        {
+            auto &exec_instr = pipeline.execute.instruction;
+            if (std::holds_alternative<RType>(exec_instr))
+            {
+                auto exec_r_type = std::get<RType>(exec_instr);
+                if (exec_r_type.rd == rs1 || exec_r_type.rd == rs2)
+                {
+                    return true; // Hazard detected
+                }
+            }
+        }
+    }
+
+    return false; // No hazard detected
 }
 
 /**
