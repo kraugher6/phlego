@@ -4,39 +4,77 @@ This project aims to create a robust and flexible RISC-V emulator with advanced 
 
 ## Roadmap
 
-### 1. **Instruction Set Support**
-   - [x] Support for RV32I base integer instruction set.
-   - [x] Support for RV32M multiplication and division extension.
-   - [ ] Support for RV32F floating-point extension.
+### 1. **Multi-ISA Support**
+- **Description:** Implement support for various RISC-V ISA extensions, including RV32IM, RV64I, RV32A, RV32F/D, etc.
+- **Status:** Completed for RV32IM.
 
-### 2. **Pipeline Implementation**
-   - [x] Five-stage pipeline: Fetch, Decode, Execute, Memory, Write-back.
-   - [ ] Hazard detection and forwarding mechanisms.
+### 2. **Pipeline and Performance Modeling**
+- **Description:** Simulate a 5-stage pipeline (Fetch, Decode, Execute, Memory, Write-back) with features like:
+  - Branch prediction.
+  - Data hazards detection and resolution.
+  - Instruction-level parallelism.
+  - Accurate stall cycles and forwarding.
+- **Status:** 5-stage pipeline completed.
 
-### 3. **Memory Management**
-   - [ ] Support for loading and storing data.
-   - [ ] Memory-mapped I/O support.
+### 3. **Debugging and Visualization**
+- **Description:**
+  - Integrate an interactive debugger (e.g., GDB).
+  - Provide GUI-based visualization for registers, memory, and pipeline stages.
+  - Display pipeline activity and stall diagnostics.
+- **Objective:** Enable real-time debugging and detailed simulation insights.
 
-### 4. **Debugging and Profiling**
-   - [ ] Integrated debugging tools with breakpoints and step execution.
-   - [ ] Performance profiling and logging.
+### 4. **Peripheral Support**
+- **Description:** Add support for peripheral devices such as:
+  - UART.
+  - Timers.
+  - Interrupt controllers.
+- **Objective:** Create a complete system simulation environment.
 
-### 5. **Simulation and Accuracy**
-   - [ ] Cycle-accurate simulation model.
-   - [ ] Accurate exception and interrupt handling.
+### 5. **Cycle-Accurate Simulation**
+- **Description:** Provide cycle-by-cycle simulation for accurate hardware behavior representation.
+- **Enhancements:**
+  - Synchronize instruction timing with pipeline stages.
+  - Model bus communication and memory latencies.
+  - Simulate contention for shared resources.
+- **Objective:** Deliver precise hardware timing and execution.
 
 ### 6. **Performance Optimization**
-   - [ ] Optimized for handling large datasets and complex binaries efficiently.
+- **Description:** Optimize the emulator for:
+  - Handling large datasets.
+  - Executing complex binaries efficiently.
+- **Techniques:**
+  - Leverage Just-In-Time (JIT) compilation for critical code paths.
+  - Implement efficient memory access patterns.
+- **Objective:** Achieve near-native execution speeds where possible.
 
-### 7. **Multithreading and Parallelism**
-   - [ ] Support for multiple CPUs or parallel cores.
+### 7. **Multi-Threading and Parallelism**
+- **Description:**
+  - Implement support for multiple cores and threads.
+  - Simulate parallel processing environments.
+- **Objective:** Enable multi-core system simulations.
 
 ### 8. **Compatibility and Toolchain Integration**
-   - [x] Compatibility with standard RISC-V binaries and toolchains.
-   - [ ] Integration with debugging, profiling, and tracing tools.
+- **Description:**
+  - Ensure compatibility with RISC-V binaries and toolchains.
+  - Integrate with external tools like profilers and tracing utilities.
+  - Support ELF binary parsing with detailed symbol resolution.
 
 ### 9. **Test Suite and Validation**
-   - [ ] Integration with official RISC-V test suites and benchmarks like SPEC CPU and CoreMark.
+- **Description:**
+  - Incorporate official RISC-V test suites and benchmarks (e.g., SPEC CPU, CoreMark).
+  - Develop unit tests for all instruction types.
+  - Include performance regression tests.
+- **Objective:** Validate emulator functionality and performance.
+
+### 10. **Commercial-Grade Features**
+- **Description:**
+  - Add features found in commercial emulators, such as:
+    - Advanced memory hierarchy (L1, L2 cache models).
+    - Support for virtual memory and MMUs.
+    - Power and thermal modeling.
+    - Enhanced debugging tools with event tracing.
+  - Provide an API for custom extensions and integrations.
+- **Objective:** Compete with industry-standard solutions.
 
 ## Getting Started
 
