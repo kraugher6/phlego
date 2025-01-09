@@ -115,17 +115,6 @@ enum class Opcode : uint8_t
 };
 
 /**
- * @brief Enum for register names.
- */
-enum class RegisterName : uint8_t
-{
-    ZERO, RA, SP, GP, TP, T0, T1, T2,
-    S0, S1, A0, A1, A2, A3, A4, A5,
-    A6, A7, S2, S3, S4, S5, S6, S7,
-    S8, S9, S10, S11, T3, T4, T5, T6
-};
-
-/**
  * @brief Struct for R-Type instructions.
  */
 struct RType
@@ -234,8 +223,8 @@ struct Pipeline
  */
 struct Register
 {
+    const char *name;
     uint32_t value;
-    RegisterName name;
 };
 
 /**
@@ -359,6 +348,11 @@ private:
     Memory &memory;                     ///< Reference to the memory object.
     uint32_t pc;                        ///< Program Counter.
     std::array<Register, 32> registers; ///< Registers with names.
+    static constexpr std::array<const char*, 32> registerNames = {
+        "zero", "ra", "sp", "gp", "tp", "t0", "t1", "t2",
+        "s0", "s1", "a0", "a1", "a2", "a3", "a4", "a5",
+        "a6", "a7", "s2", "s3", "s4", "s5", "s6", "s7",
+        "s8", "s9", "s10", "s11", "t3", "t4", "t5", "t6"};
 };
 
 #endif

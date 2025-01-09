@@ -14,9 +14,9 @@
 CPU::CPU(Memory &memory) : memory(memory), pc(0)
 {
     // Initialize registers to zero
-    for (auto &reg : registers)
+    for (std::size_t i = 0; i < registers.size(); ++i)
     {
-        reg = 0;
+        registers[i] = {registerNames[i], 0}; // Inizializza i valori a 0
     }
 }
 
@@ -230,7 +230,7 @@ void CPU::execute(Pipeline &pipeline)
             else
             {
                 int32_t sign_extended_imm = static_cast<int32_t>(i_type.imm);
-                pipeline.execute.alu_result = registers[i_type.rs1] + sign_extended_imm;
+                pipeline.execute.alu_result = registers[i_type.rs1].value + sign_extended_imm;
             }
         }
         else if (std::holds_alternative<JType>(decoded))
@@ -246,7 +246,7 @@ void CPU::execute(Pipeline &pipeline)
             int32_t sign_extended_imm = static_cast<int32_t>(s_type.imm);
 
             // Perform the addition
-            pipeline.execute.alu_result = registers[s_type.rs1] + sign_extended_imm;
+            pipeline.execute.alu_result = registers[s_type.rs1].value + sign_extended_imm;
         }
         else if (std::holds_alternative<BType>(decoded))
         {
@@ -274,44 +274,44 @@ uint32_t CPU::execute_i_type(const IType &instr)
     switch (instr.funct3)
     {
     case ITypeFunct3::ADDI:
-        result = registers[instr.rs1] + instr.imm;
+        result = registers[instr.rs1].value + instr.imm;
         LOG_DEBUG("Executed ADDI: x" + std::to_string(instr.rd) + " = x" + std::to_string(instr.rs1) + " + " + std::to_string(instr.imm));
         break;
     case ITypeFunct3::SLLI:
-        result = registers[instr.rs1] << (instr.imm & 0x1F);
+        result = registers[instr.rs1].value << (instr.imm & 0x1F);
         LOG_DEBUG("Executed SLLI: x" + std::to_string(instr.rd) + " = x" + std::to_string(instr.rs1) + " << " + std::to_string(instr.imm & 0x1F));
         break;
     case ITypeFunct3::SLTI:
-        result = (int32_t)registers[instr.rs1] < (int32_t)instr.imm ? 1 : 0;
+        result = (int32_t)registers[instr.rs1].value < (int32_t)instr.imm ? 1 : 0;
         LOG_DEBUG("Executed SLTI: x" + std::to_string(instr.rd) + " = x" + std::to_string(instr.rs1) + " < " + std::to_string(instr.imm));
         break;
     case ITypeFunct3::SLTIU:
-        result = registers[instr.rs1] < (uint32_t)instr.imm ? 1 : 0;
+        result = registers[instr.rs1].value < (uint32_t)instr.imm ? 1 : 0;
         LOG_DEBUG("Executed SLTIU: x" + std::to_string(instr.rd) + " = x" + std::to_string(instr.rs1) + " < " + std::to_string(instr.imm));
         break;
     case ITypeFunct3::XORI:
-        result = registers[instr.rs1] ^ instr.imm;
+        result = registers[instr.rs1].value ^ instr.imm;
         LOG_DEBUG("Executed XORI: x" + std::to_string(instr.rd) + " = x" + std::to_string(instr.rs1) + " ^ " + std::to_string(instr.imm));
         break;
     case ITypeFunct3::SRLI:
         // case ITypeFunct3::SRAI:
         if ((instr.imm & 0x40000000) == 0)
         {
-            result = registers[instr.rs1] >> (instr.imm & 0x1F);
+            result = registers[instr.rs1].value >> (instr.imm & 0x1F);
             LOG_DEBUG("Executed SRLI: x" + std::to_string(instr.rd) + " = x" + std::to_string(instr.rs1) + " >> " + std::to_string(instr.imm & 0x1F));
         }
         else
         {
-            result = (int32_t)registers[instr.rs1] >> (instr.imm & 0x1F);
+            result = (int32_t)registers[instr.rs1].value >> (instr.imm & 0x1F);
             LOG_DEBUG("Executed SRAI: x" + std::to_string(instr.rd) + " = (int32_t)x" + std::to_string(instr.rs1) + " >> " + std::to_string(instr.imm & 0x1F));
         }
         break;
     case ITypeFunct3::ORI:
-        result = registers[instr.rs1] | instr.imm;
+        result = registers[instr.rs1].value | instr.imm;
         LOG_DEBUG("Executed ORI: x" + std::to_string(instr.rd) + " = x" + std::to_string(instr.rs1) + " | " + std::to_string(instr.imm));
         break;
     case ITypeFunct3::ANDI:
-        result = registers[instr.rs1] & instr.imm;
+        result = registers[instr.rs1].value & instr.imm;
         LOG_DEBUG("Executed ANDI: x" + std::to_string(instr.rd) + " = x" + std::to_string(instr.rs1) + " & " + std::to_string(instr.imm));
         break;
     default:
@@ -369,13 +369,13 @@ void CPU::mem(Pipeline &pipeline)
             switch (s_type.funct3)
             {
             case STypeFunct3::SB:
-                memory.store_byte(address, registers[s_type.rs2] & 0xFF);
+                memory.store_byte(address, registers[s_type.rs2].value & 0xFF);
                 break;
             case STypeFunct3::SH:
-                memory.store_half_word(address, registers[s_type.rs2] & 0xFFFF);
+                memory.store_half_word(address, registers[s_type.rs2].value & 0xFFFF);
                 break;
             case STypeFunct3::SW:
-                memory.store_word(address, registers[s_type.rs2]);
+                memory.store_word(address, registers[s_type.rs2].value);
                 break;
             default:
                 LOG_ERROR("Unsupported store function! Funct3: " + std::to_string(static_cast<uint8_t>(s_type.funct3)));
@@ -443,20 +443,20 @@ void CPU::run()
  */
 void CPU::execute_s_type(const SType &instr)
 {
-    uint32_t address = registers[instr.rs1] + instr.imm;
+    uint32_t address = registers[instr.rs1].value + instr.imm;
     LOG_DEBUG("Executing store instruction at address: 0x" + Memory::to_hex_string(address));
     switch (instr.funct3)
     {
     case STypeFunct3::SB:
-        memory.store_byte(address, registers[instr.rs2] & 0xFF);
+        memory.store_byte(address, registers[instr.rs2].value & 0xFF);
         LOG_DEBUG("Stored byte from register x" + std::to_string(instr.rs2) + " to address: 0x" + Memory::to_hex_string(address));
         break;
     case STypeFunct3::SH:
-        memory.store_half_word(address, registers[instr.rs2] & 0xFFFF);
+        memory.store_half_word(address, registers[instr.rs2].value & 0xFFFF);
         LOG_DEBUG("Stored half word from register x" + std::to_string(instr.rs2) + " to address: 0x" + Memory::to_hex_string(address));
         break;
     case STypeFunct3::SW:
-        memory.store_word(address, registers[instr.rs2]);
+        memory.store_word(address, registers[instr.rs2].value);
         LOG_DEBUG("Stored word from register x" + std::to_string(instr.rs2) + " to address: 0x" + Memory::to_hex_string(address));
         break;
     default:
@@ -482,17 +482,17 @@ uint32_t CPU::execute_r_type(const RType &instr)
         // case RTypeFunct3::MUL:
         if (instr.funct7 == Funct7::ADD)
         { // ADD
-            result = registers[instr.rs1] + registers[instr.rs2];
+            result = registers[instr.rs1].value + registers[instr.rs2].value;
             LOG_DEBUG("Executed ADD: x" + std::to_string(instr.rd) + " = x" + std::to_string(instr.rs1) + " + x" + std::to_string(instr.rs2));
         }
         else if (instr.funct7 == Funct7::SUB)
         { // SUB
-            result = registers[instr.rs1] - registers[instr.rs2];
+            result = registers[instr.rs1].value - registers[instr.rs2].value;
             LOG_DEBUG("Executed SUB: x" + std::to_string(instr.rd) + " = x" + std::to_string(instr.rs1) + " - x" + std::to_string(instr.rs2));
         }
         else if (instr.funct7 == Funct7::MUL)
         { // MUL
-            result = registers[instr.rs1] * registers[instr.rs2];
+            result = registers[instr.rs1].value * registers[instr.rs2].value;
             LOG_DEBUG("Executed MUL: x" + std::to_string(instr.rd) + " = x" + std::to_string(instr.rs1) + " * x" + std::to_string(instr.rs2));
         }
         break;
@@ -500,12 +500,12 @@ uint32_t CPU::execute_r_type(const RType &instr)
         // case RTypeFunct3::MULH:
         if (instr.funct7 == Funct7::SLL)
         {
-            result = registers[instr.rs1] << (registers[instr.rs2] & 0x1F);
+            result = registers[instr.rs1].value << (registers[instr.rs2].value & 0x1F);
             LOG_DEBUG("Executed SLL: x" + std::to_string(instr.rd) + " = x" + std::to_string(instr.rs1) + " << " + std::to_string(registers[instr.rs2] & 0x1F));
         }
         else if (instr.funct7 == Funct7::MULH)
         {
-            int64_t result_mul = (int64_t)registers[instr.rs1] * (int64_t)registers[instr.rs2];
+            int64_t result_mul = (int64_t)registers[instr.rs1].value * (int64_t)registers[instr.rs2].value;
             result = result_mul >> 32;
             LOG_DEBUG("Executed MULH: x" + std::to_string(instr.rd) + " = (int64_t)x" + std::to_string(instr.rs1) + " * (int64_t)x" + std::to_string(instr.rs2) + " >> 32");
         }
@@ -514,12 +514,12 @@ uint32_t CPU::execute_r_type(const RType &instr)
         // case RTypeFunct3::MULHSU:
         if (instr.funct7 == Funct7::SLT)
         {
-            result = (int32_t)registers[instr.rs1] < (int32_t)registers[instr.rs2] ? 1 : 0;
+            result = (int32_t)registers[instr.rs1].value < (int32_t)registers[instr.rs2].value ? 1 : 0;
             LOG_DEBUG("Executed SLT: x" + std::to_string(instr.rd) + " = x" + std::to_string(instr.rs1) + " < x" + std::to_string(instr.rs2));
         }
         else if (instr.funct7 == Funct7::MULHSU)
         {
-            int64_t result_mul = (int64_t)registers[instr.rs1] * (uint64_t)registers[instr.rs2];
+            int64_t result_mul = (int64_t)registers[instr.rs1].value * (uint64_t)registers[instr.rs2].value;
             result = result_mul >> 32;
             LOG_DEBUG("Executed MULHSU: x" + std::to_string(instr.rd) + " = (int64_t)x" + std::to_string(instr.rs1) + " * (uint64_t)x" + std::to_string(instr.rs2) + " >> 32");
         }
@@ -528,12 +528,12 @@ uint32_t CPU::execute_r_type(const RType &instr)
         // case RTypeFunct3::MULHU:
         if (instr.funct7 == Funct7::SLTU)
         {
-            result = registers[instr.rs1] < registers[instr.rs2] ? 1 : 0;
+            result = registers[instr.rs1].value < registers[instr.rs2].value ? 1 : 0;
             LOG_DEBUG("Executed SLTU: x" + std::to_string(instr.rd) + " = x" + std::to_string(instr.rs1) + " < x" + std::to_string(instr.rs2));
         }
         else if (instr.funct7 == Funct7::MULHU)
         {
-            uint64_t result_mul = (uint64_t)registers[instr.rs1] * (uint64_t)registers[instr.rs2];
+            uint64_t result_mul = (uint64_t)registers[instr.rs1].value * (uint64_t)registers[instr.rs2].value;
             result = result_mul >> 32;
             LOG_DEBUG("Executed MULHU: x" + std::to_string(instr.rd) + " = (uint64_t)x" + std::to_string(instr.rs1) + " * (uint64_t)x" + std::to_string(instr.rs2) + " >> 32");
         }
@@ -542,17 +542,17 @@ uint32_t CPU::execute_r_type(const RType &instr)
         // case RTypeFunct3::DIV:
         if (instr.funct7 == Funct7::XOR)
         {
-            result = registers[instr.rs1] ^ registers[instr.rs2];
+            result = registers[instr.rs1].value ^ registers[instr.rs2].value;
             LOG_DEBUG("Executed XOR: x" + std::to_string(instr.rd) + " = x" + std::to_string(instr.rs1) + " ^ x" + std::to_string(instr.rs2));
         }
         else if (instr.funct7 == Funct7::DIV)
         {
-            if (registers[instr.rs2] == 0)
+            if (registers[instr.rs2].value == 0)
             {
                 LOG_ERROR("Division by zero!");
                 throw std::runtime_error("Division by zero!");
             }
-            result = (int32_t)registers[instr.rs1] / (int32_t)registers[instr.rs2];
+            result = (int32_t)registers[instr.rs1].value / (int32_t)registers[instr.rs2].value;
             LOG_DEBUG("Executed DIV: x" + std::to_string(instr.rd) + " = x" + std::to_string(instr.rs1) + " / x" + std::to_string(instr.rs2));
         }
         break;
@@ -560,30 +560,30 @@ uint32_t CPU::execute_r_type(const RType &instr)
         // case RTypeFunct3::SRA:
         if (instr.funct7 == Funct7::SRL)
         { // SRL
-            result = registers[instr.rs1] >> (registers[instr.rs2] & 0x1F);
-            LOG_DEBUG("Executed SRL: x" + std::to_string(instr.rd) + " = x" + std::to_string(instr.rs1) + " >> " + std::to_string(registers[instr.rs2] & 0x1F));
+            result = registers[instr.rs1].value >> (registers[instr.rs2].value & 0x1F);
+            LOG_DEBUG("Executed SRL: x" + std::to_string(instr.rd) + " = x" + std::to_string(instr.rs1) + " >> " + std::to_string(registers[instr.rs2].value & 0x1F));
         }
         else if (instr.funct7 == Funct7::SRA)
         { // SRA
-            result = (int32_t)registers[instr.rs1] >> (registers[instr.rs2] & 0x1F);
-            LOG_DEBUG("Executed SRA: x" + std::to_string(instr.rd) + " = (int32_t)x" + std::to_string(instr.rs1) + " >> " + std::to_string(registers[instr.rs2] & 0x1F));
+            result = (int32_t)registers[instr.rs1].value >> (registers[instr.rs2].value & 0x1F);
+            LOG_DEBUG("Executed SRA: x" + std::to_string(instr.rd) + " = (int32_t)x" + std::to_string(instr.rs1) + " >> " + std::to_string(registers[instr.rs2].value & 0x1F));
         }
         break;
     case RTypeFunct3::OR:
         // case RTypeFunct3::REM:
         if (instr.funct7 == Funct7::OR)
         {
-            result = registers[instr.rs1] | registers[instr.rs2];
+            result = registers[instr.rs1].value | registers[instr.rs2].value;
             LOG_DEBUG("Executed OR: x" + std::to_string(instr.rd) + " = x" + std::to_string(instr.rs1) + " | x" + std::to_string(instr.rs2));
         }
         else if (instr.funct7 == Funct7::REM)
         {
-            if (registers[instr.rs2] == 0)
+            if (registers[instr.rs2].value == 0)
             {
                 LOG_ERROR("Remainder by zero!");
                 throw std::runtime_error("Remainder by zero!");
             }
-            result = (int32_t)registers[instr.rs1] % (int32_t)registers[instr.rs2];
+            result = (int32_t)registers[instr.rs1].value % (int32_t)registers[instr.rs2].value;
             LOG_DEBUG("Executed REM: x" + std::to_string(instr.rd) + " = x" + std::to_string(instr.rs1) + " % x" + std::to_string(instr.rs2));
         }
         break;
@@ -591,17 +591,17 @@ uint32_t CPU::execute_r_type(const RType &instr)
         // case RTypeFunct3::REMU:
         if (instr.funct7 == Funct7::AND)
         {
-            result = registers[instr.rs1] & registers[instr.rs2];
+            result = registers[instr.rs1].value & registers[instr.rs2].value;
             LOG_DEBUG("Executed AND: x" + std::to_string(instr.rd) + " = x" + std::to_string(instr.rs1) + " & x" + std::to_string(instr.rs2));
         }
         else if (instr.funct7 == Funct7::REMU)
         {
-            if (registers[instr.rs2] == 0)
+            if (registers[instr.rs2].value == 0)
             {
                 LOG_ERROR("Remainder by zero!");
                 throw std::runtime_error("Remainder by zero!");
             }
-            result = registers[instr.rs1] % registers[instr.rs2];
+            result = registers[instr.rs1].value % registers[instr.rs2].value;
             LOG_DEBUG("Executed REMU: x" + std::to_string(instr.rd) + " = x" + std::to_string(instr.rs1) + " % x" + std::to_string(instr.rs2));
         }
         break;
@@ -625,14 +625,14 @@ void CPU::execute_b_type(const BType &instr)
     switch (instr.funct3)
     {
     case BTypeFunct3::BEQ:
-        if (registers[instr.rs1] == registers[instr.rs2])
+        if (registers[instr.rs1].value == registers[instr.rs2].value)
         {
             pc = target - 4; // Adjust PC since it's already incremented
             LOG_DEBUG("Executed BEQ: Branch taken to address: 0x" + Memory::to_hex_string(pc));
         }
         break;
     case BTypeFunct3::BNE:
-        if (registers[instr.rs1] != registers[instr.rs2])
+        if (registers[instr.rs1].value != registers[instr.rs2].value)
         {
             pc = target - 4;
             LOG_DEBUG("Executed BNE: Branch taken to address: 0x" + Memory::to_hex_string(pc));
@@ -652,7 +652,7 @@ void CPU::execute_b_type(const BType &instr)
 void CPU::execute_j_type(const JType &instr)
 {
     LOG_DEBUG("Executing J-Type instruction");
-    registers[instr.rd] = pc + 4;
+    registers[instr.rd].value = pc + 4;
     pc += instr.imm - 4;
     LOG_DEBUG("Executed JAL: x" + std::to_string(instr.rd) + " = 0x" + Memory::to_hex_string(pc));
 }
@@ -675,8 +675,8 @@ void CPU::set_pc(uint32_t address)
  */
 void CPU::set_sp(uint32_t address)
 {
-    registers[2] = address;
-    LOG_DEBUG("Stack pointer set to: 0x" + Memory::to_hex_string(registers[2]));
+    registers[2].value = address;
+    LOG_DEBUG("Stack pointer set to: 0x" + Memory::to_hex_string(registers[2].value));
 }
 
 /**
@@ -724,13 +724,11 @@ bool CPU::detect_hazard(const Pipeline &pipeline)
 /**
  * @brief Print the CPU registers.
  */
-void CPU::print_registers() const
-{
+void CPU::print_registers() const {
     std::cout << "PC: 0x" << Memory::to_hex_string(pc) << std::endl;
-    for (size_t i = 0; i < 32; ++i)
-    {
-        std::cout << "x" << std::setw(2) << std::setfill('0') << i << ": "
-                  << std::setw(8) << std::setfill(' ') << Memory::to_hex_string(registers[i]) << std::endl;
+    for (size_t i = 0; i < 32; ++i) {
+        std::cout << std::left << std::setw(4) << registers[i].name << ": "
+                  << std::right << std::setw(8) << std::setfill(' ') << Memory::to_hex_string(registers[i].value) << std::endl;
     }
     std::cout << std::endl;
 }
@@ -752,7 +750,7 @@ void CPU::write_back(Pipeline &pipeline)
         if (std::holds_alternative<RType>(instr))
         {
             auto r_type = std::get<RType>(instr);
-            registers[r_type.rd] = pipeline.execute.alu_result;
+            registers[r_type.rd].value = pipeline.execute.alu_result;
             LOG_DEBUG("Write-back R-Type: x" + std::to_string(r_type.rd) + " = " + std::to_string(pipeline.execute.alu_result));
         }
         else if (std::holds_alternative<IType>(instr))
@@ -760,13 +758,13 @@ void CPU::write_back(Pipeline &pipeline)
             if (static_cast<Opcode>(pipeline.fetch.instruction & 0x7F) == Opcode::I_TYPE_ALU)
             {
                 auto i_type = std::get<IType>(instr);
-                registers[i_type.rd] = pipeline.execute.alu_result;
+                registers[i_type.rd].value = pipeline.execute.alu_result;
                 LOG_DEBUG("Write-back I-Type: x" + std::to_string(i_type.rd) + " = " + Memory::to_hex_string(pipeline.execute.alu_result));
             }
             else
             {
                 auto i_type = std::get<IType>(instr);
-                registers[i_type.rd] = pipeline.memory.result;
+                registers[i_type.rd].value = pipeline.memory.result;
                 LOG_DEBUG("Write-back I-Type: x" + std::to_string(i_type.rd) + " = " + Memory::to_hex_string(pipeline.memory.result));
             }
         }
