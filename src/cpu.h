@@ -216,6 +216,15 @@ struct Pipeline
 };
 
 /**
+ * @brief Struct representing a register with its value and name.
+ */
+struct Register
+{
+    const char *name;
+    uint32_t value;
+};
+
+/**
  * @brief Class representing the CPU.
  */
 class CPU
@@ -324,9 +333,14 @@ public:
     void print_registers() const;
 
 private:
-    Memory &memory;         ///< Reference to the memory object.
-    uint32_t pc;            ///< Program Counter.
-    uint32_t registers[32]; ///< Registers.
+    Memory &memory;                     ///< Reference to the memory object.
+    uint32_t pc;                        ///< Program Counter.
+    std::array<Register, 32> registers; ///< Registers with names.
+    static constexpr std::array<const char*, 32> registerNames = {
+        "zero", "ra", "sp", "gp", "tp", "t0", "t1", "t2",
+        "s0", "s1", "a0", "a1", "a2", "a3", "a4", "a5",
+        "a6", "a7", "s2", "s3", "s4", "s5", "s6", "s7",
+        "s8", "s9", "s10", "s11", "t3", "t4", "t5", "t6"};
 };
 
 #endif

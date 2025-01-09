@@ -338,6 +338,6 @@ void Memory::print_memory(uint32_t start_address, uint32_t end_address) const {
  */
 std::string Memory::to_hex_string(uint32_t value) {
     std::stringstream ss;
-    ss << std::hex << value;
+    ss << "0x" << std::hex << value;
     return ss.str();
 }
