@@ -420,7 +420,7 @@ void CPU::run()
         }
         else
         {
-            LOG_INFO("Stall detected. Pipeline stages are stalled.");
+            LOG_WARN("Stall detected. Pipeline stages are stalled.");
         }
 
         // Check for the ret instruction (0x00008067)

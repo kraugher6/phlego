@@ -7,7 +7,8 @@
 // Define logging levels
 #define LOG_LEVEL_DEBUG 0
 #define LOG_LEVEL_INFO 1
-#define LOG_LEVEL_ERROR 2
+#define LOG_LEVEL_WARN 2
+#define LOG_LEVEL_ERROR 3
 
 // Set the current logging level
 #ifndef LOG_LEVEL
@@ -18,6 +19,12 @@
 #define LOG_ERROR(message) Logger::log("ERROR", message, __FUNCTION__, __FILE__, __LINE__)
 #else
 #define LOG_ERROR(message)
+#endif
+
+#if LOG_LEVEL <= LOG_LEVEL_WARN
+#define LOG_WARN(message) Logger::log("WARN", message, __FUNCTION__, __FILE__, __LINE__)
+#else
+#define LOG_WARN(message)
 #endif
 
 #if LOG_LEVEL <= LOG_LEVEL_INFO
@@ -40,7 +47,7 @@ public:
     /**
      * @brief Log a message.
      *
-     * @param level The log level (e.g., "DEBUG", "INFO", "ERROR").
+     * @param level The log level (e.g., "DEBUG", "INFO", "WARN", "ERROR").
      * @param message The message to log.
      * @param function The function name where the log is called.
      * @param file The file name where the log is called.
