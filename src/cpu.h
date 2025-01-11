@@ -261,37 +261,36 @@ public:
     /**
      * @brief Fetch the next instruction from memory.
      *
-     * @param pipeline The pipeline state.
      */
-    void fetch(Pipeline &pipeline);
+    void fetch();
 
     /**
      * @brief Decode the fetched instruction.
      *
      * @param pipeline The pipeline state.
      */
-    void decode(Pipeline &pipeline);
+    void decode();
 
     /**
      * @brief Execute the decoded instruction.
      *
      * @param pipeline The pipeline state.
      */
-    void execute(Pipeline &pipeline);
+    void execute();
 
     /**
      * @brief Execute the memory stage.
      *
      * @param pipeline The pipeline state.
      */
-    void mem(Pipeline &pipeline);
+    void mem();
 
     /**
      * @brief Execute the write-back stage.
      *
      * @param pipeline The pipeline state.
      */
-    void write_back(Pipeline &pipeline);
+    void write_back();
 
     /**
      * @brief Execute an I-Type ALU instruction.
@@ -355,10 +354,9 @@ public:
     /**
      * @brief Check for data hazards and set stall signals.
      *
-     * @param pipeline The pipeline state.
      * @return true if a stall is needed, false otherwise.
      */
-    bool detect_hazard(const Pipeline &pipeline);
+    bool detect_hazard();
 
     /**
      * @brief Print the CPU registers.
@@ -367,6 +365,7 @@ public:
 
 private:
     Memory &memory;                     ///< Reference to the memory object.
+    Pipeline pipeline;
     uint32_t pc;                        ///< Program Counter.
     std::array<Register, 32> registers; ///< Registers with names.
     static constexpr std::array<const char *, 32> registerNames = {
@@ -374,6 +373,10 @@ private:
         "s0", "s1", "a0", "a1", "a2", "a3", "a4", "a5",
         "a6", "a7", "s2", "s3", "s4", "s5", "s6", "s7",
         "s8", "s9", "s10", "s11", "t3", "t4", "t5", "t6"};
+
+    void start_threads();
+    void stop_threads();
+
     std::mutex fetch_mutex;
     std::mutex decode_mutex;
     std::mutex execute_mutex;

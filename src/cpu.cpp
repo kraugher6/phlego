@@ -25,10 +25,10 @@ CPU::CPU(Memory &memory) : memory(memory), pc(0)
  *
  * @param pipeline The pipeline state.
  */
-void CPU::fetch(Pipeline &pipeline)
+void CPU::fetch()
 {
     std::unique_lock<std::mutex> lock(fetch_mutex);
-    fetch_cv.wait(lock, [this, &pipeline]
+    fetch_cv.wait(lock, [this]
                   { return !pipeline.stall && !pipeline.fetch.valid; });
     if (!pipeline.stall && !pipeline.fetch.valid)
     {
@@ -46,10 +46,10 @@ void CPU::fetch(Pipeline &pipeline)
  *
  * @param pipeline The pipeline state.
  */
-void CPU::decode(Pipeline &pipeline)
+void CPU::decode()
 {
     std::unique_lock<std::mutex> lock(decode_mutex);
-    decode_cv.wait(lock, [this, &pipeline]
+    decode_cv.wait(lock, [this]
                    { return pipeline.fetch.valid; });
 
     if (!pipeline.stall && pipeline.fetch.valid)
@@ -208,10 +208,10 @@ void CPU::decode(Pipeline &pipeline)
  *
  * @param pipeline The pipeline state.
  */
-void CPU::execute(Pipeline &pipeline)
+void CPU::execute()
 {
     std::unique_lock<std::mutex> lock(execute_mutex);
-    execute_cv.wait(lock, [this, &pipeline]
+    execute_cv.wait(lock, [this]
                     { return pipeline.decode.valid; });
 
     if (!pipeline.stall && pipeline.decode.valid)
@@ -356,10 +356,10 @@ uint32_t CPU::execute_i_type(const IType &instr)
  *
  * @param pipeline The pipeline state.
  */
-void CPU::mem(Pipeline &pipeline)
+void CPU::mem()
 {
     std::unique_lock<std::mutex> lock(mem_mutex);
-    mem_cv.wait(lock, [this, &pipeline]
+    mem_cv.wait(lock, [this]
                 { return pipeline.execute.valid; });
 
     if (!pipeline.stall && pipeline.execute.valid)
@@ -425,50 +425,61 @@ void CPU::mem(Pipeline &pipeline)
  */
 void CPU::run()
 {
-    Pipeline pipeline;
-
     // Dump CPU registers before starting execution
     LOG_INFO("CPU state at start:");
     print_registers();
 
-    while (true)
+    // while (true)
+    // {
+    //     // Check for hazards and set stall signal
+    //     pipeline.stall = detect_hazard();
+
+    //     if (!pipeline.stall)
+    //     {
+    //         // Fetch stage
+    //         fetch();
+
+    //         // Decode stage
+    //         decode();
+
+    //         // Execute stage
+    //         execute();
+
+    //         // Memory stage
+    //         mem();
+
+    //         // Write-back stage
+    //         write_back();
+    //     }
+    //     else
+    //     {
+    //         LOG_WARN("Stall detected. Pipeline stages are stalled.");
+    //     }
+
+    //     // Check for the ret instruction (0x00008067)
+    //     if (pipeline.fetch.instruction == 0x00008067)
+    //     {
+    //         LOG_INFO("Encountered ret instruction. Terminating execution.");
+    //         break;
+    //     }
+
+    //     // Dump CPU registers after executing the instruction
+    //     LOG_INFO("CPU state after execution:");
+    //     print_registers();
+    // }
+
+    start_threads();
+
+    // Wait for the threads to finish
+    if (pipeline.fetch.instruction == 0x00008067)
     {
-        // Check for hazards and set stall signal
-        pipeline.stall = detect_hazard(pipeline);
-
-        if (!pipeline.stall)
-        {
-            // Fetch stage
-            fetch(pipeline);
-
-            // Decode stage
-            decode(pipeline);
-
-            // Execute stage
-            execute(pipeline);
-
-            // Memory stage
-            mem(pipeline);
-
-            // Write-back stage
-            write_back(pipeline);
-        }
-        else
-        {
-            LOG_WARN("Stall detected. Pipeline stages are stalled.");
-        }
-
-        // Check for the ret instruction (0x00008067)
-        if (pipeline.fetch.instruction == 0x00008067)
-        {
-            LOG_INFO("Encountered ret instruction. Terminating execution.");
-            break;
-        }
-
-        // Dump CPU registers after executing the instruction
-        LOG_INFO("CPU state after execution:");
-        print_registers();
+        stop_threads();
+        LOG_INFO("Encountered ret instruction. Terminating execution.");
     }
+
+    // Dump CPU registers after executing the instruction
+    LOG_INFO("CPU state after execution:");
+    print_registers();
 }
 
 /**
@@ -734,7 +745,7 @@ void CPU::set_sp(uint32_t address)
  * @param pipeline The pipeline state.
  * @return true if a stall is needed, false otherwise.
  */
-bool CPU::detect_hazard(const Pipeline &pipeline)
+bool CPU::detect_hazard()
 {
     if (pipeline.decode.valid)
     {
@@ -789,10 +800,10 @@ void CPU::print_registers() const
  *
  * @param pipeline The pipeline state.
  */
-void CPU::write_back(Pipeline &pipeline)
+void CPU::write_back()
 {
     std::unique_lock<std::mutex> lock(write_back_mutex);
-    write_back_cv.wait(lock, [this, &pipeline]
+    write_back_cv.wait(lock, [this]
                        { return pipeline.memory.valid; });
 
     if (pipeline.memory.valid)
@@ -830,4 +841,26 @@ void CPU::write_back(Pipeline &pipeline)
             LOG_DEBUG("Write-back U-Type: x" + std::to_string(u_type.rd) + " = " + std::to_string(pipeline.execute.alu_result));
         }
     }
+}
+
+void CPU::start_threads()
+{
+    fetch_thread = std::thread(&CPU::fetch, this);
+    decode_thread = std::thread(&CPU::decode, this);
+    execute_thread = std::thread(&CPU::execute, this);
+    mem_thread = std::thread(&CPU::mem, this);
+    write_back_thread = std::thread(&CPU::write_back, this);
+
+    LOG_DEBUG("Started CPU threads");
+}
+
+void CPU::stop_threads()
+{
+    fetch_thread.join();
+    decode_thread.join();
+    execute_thread.join();
+    mem_thread.join();
+    write_back_thread.join();
+
+    LOG_DEBUG("Stopped CPU threads");
 }
