@@ -27,6 +27,9 @@ CPU::CPU(Memory &memory) : memory(memory), pc(0)
  */
 void CPU::fetch(Pipeline &pipeline)
 {
+    std::unique_lock<std::mutex> lock(fetch_mutex);
+    fetch_cv.wait(lock, [this, &pipeline]
+                  { return !pipeline.fetch.valid; });
     if (!pipeline.fetch.valid)
     {
         pipeline.fetch.instruction = memory.load_word(pc);
@@ -35,6 +38,7 @@ void CPU::fetch(Pipeline &pipeline)
         pipeline.fetch.valid = true;
         LOG_DEBUG("Fetched instruction: 0x" + Memory::to_hex_string(pipeline.fetch.instruction) + " from address: 0x" + Memory::to_hex_string(pc));
     }
+    decode_cv.notify_all();
 }
 
 /**
@@ -44,6 +48,10 @@ void CPU::fetch(Pipeline &pipeline)
  */
 void CPU::decode(Pipeline &pipeline)
 {
+    std::unique_lock<std::mutex> lock(decode_mutex);
+    decode_cv.wait(lock, [this, &pipeline]
+                   { return pipeline.fetch.valid; });
+
     if (pipeline.fetch.valid)
     {
         uint32_t instruction = pipeline.fetch.instruction;
@@ -192,6 +200,7 @@ void CPU::decode(Pipeline &pipeline)
         pipeline.fetch.valid = false;
         LOG_DEBUG("Decoded instruction at address: 0x" + Memory::to_hex_string(pipeline.decode.pc));
     }
+    execute_cv.notify_all();
 }
 
 /**
@@ -201,6 +210,10 @@ void CPU::decode(Pipeline &pipeline)
  */
 void CPU::execute(Pipeline &pipeline)
 {
+    std::unique_lock<std::mutex> lock(execute_mutex);
+    execute_cv.wait(lock, [this, &pipeline]
+                    { return pipeline.decode.valid; });
+
     if (pipeline.decode.valid)
     {
         auto &decoded = pipeline.decode.decoded_instruction;
@@ -257,6 +270,7 @@ void CPU::execute(Pipeline &pipeline)
             LOG_ERROR("Unsupported instruction!");
             throw std::runtime_error("Unsupported instruction!");
         }
+        mem_cv.notify_all();
     }
 }
 
@@ -327,6 +341,10 @@ uint32_t CPU::execute_i_type(const IType &instr)
  */
 void CPU::mem(Pipeline &pipeline)
 {
+    std::unique_lock<std::mutex> lock(mem_mutex);
+    mem_cv.wait(lock, [this, &pipeline]
+                { return pipeline.execute.valid; });
+
     if (pipeline.execute.valid)
     {
         auto &instr = pipeline.execute.instruction;
@@ -381,6 +399,7 @@ void CPU::mem(Pipeline &pipeline)
                 std::cerr << "Unsupported store function! Funct3: " << static_cast<uint8_t>(s_type.funct3) << std::endl;
             }
         }
+        write_back_cv.notify_all();
     }
 }
 
@@ -703,6 +722,10 @@ void CPU::print_registers() const
  */
 void CPU::write_back(Pipeline &pipeline)
 {
+    std::unique_lock<std::mutex> lock(write_back_mutex);
+    write_back_cv.wait(lock, [this, &pipeline]
+                       { return pipeline.memory.valid; });
+
     if (pipeline.memory.valid)
     {
         auto &instr = pipeline.memory.instruction;
