@@ -11,7 +11,7 @@
  *
  * @param memory Reference to the memory object.
  */
-CPU::CPU(Memory &memory) : memory(memory), pc(0)
+CPU::CPU(Memory &memory) : memory(memory), pc(0), running(false)
 {
     // Initialize registers to zero
     for (std::size_t i = 0; i < registers.size(); ++i)
@@ -28,17 +28,22 @@ CPU::CPU(Memory &memory) : memory(memory), pc(0)
 void CPU::fetch()
 {
     std::unique_lock<std::mutex> lock(fetch_mutex);
-    fetch_cv.wait(lock, [this]
-                  { return !pipeline.stall && !pipeline.fetch.valid; });
-    if (!pipeline.stall && !pipeline.fetch.valid)
-    {
-        pipeline.fetch.instruction = memory.load_word(pc);
-        pipeline.fetch.pc = pc;
-        pc += 4;
-        pipeline.fetch.valid = true;
-        LOG_DEBUG("Fetched instruction: 0x" + Memory::to_hex_string(pipeline.fetch.instruction) + " from address: 0x" + Memory::to_hex_string(pc));
+    while (running)
+    { // Add while loop with condition
+        fetch_cv.wait(lock, [this]
+                      { return (!pipeline.fetch.valid) || !running; });
+                    //   { return (!pipeline.stall && !pipeline.fetch.valid) || !running; });
+        // if (!pipeline.stall && !pipeline.fetch.valid && running)
+        if (!pipeline.fetch.valid && running)
+        {
+            pipeline.fetch.instruction = memory.load_word(pc);
+            pipeline.fetch.pc = pc;
+            pc += 4;
+            pipeline.fetch.valid = true;
+            LOG_DEBUG("Fetched instruction: 0x" + Memory::to_hex_string(pipeline.fetch.instruction) + " from address: 0x" + Memory::to_hex_string(pc));
+        }
+        decode_cv.notify_all();
     }
-    decode_cv.notify_all();
 }
 
 /**
@@ -49,158 +54,161 @@ void CPU::fetch()
 void CPU::decode()
 {
     std::unique_lock<std::mutex> lock(decode_mutex);
-    decode_cv.wait(lock, [this]
-                   { return pipeline.fetch.valid; });
+    while (running)
+    { // Add while loop with condition
+        decode_cv.wait(lock, [this]
+                       { return pipeline.fetch.valid || !running; });
 
-    if (!pipeline.stall && pipeline.fetch.valid)
-    {
-        uint32_t instruction = pipeline.fetch.instruction;
-        if (instruction == 0)
+        if (!pipeline.stall && pipeline.fetch.valid)
         {
-            LOG_ERROR("Encountered a zero instruction, which is unsupported.");
-            throw std::runtime_error("Unsupported instruction! Instruction: 0x0");
-        }
+            uint32_t instruction = pipeline.fetch.instruction;
+            if (instruction == 0)
+            {
+                LOG_ERROR("Encountered a zero instruction, which is unsupported.");
+                throw std::runtime_error("Unsupported instruction! Instruction: 0x0");
+            }
 
-        Opcode opcode = static_cast<Opcode>(instruction & 0x7F);
-        LOG_DEBUG("Decoding instruction: 0x" + Memory::to_hex_string(instruction) + " with opcode: 0x" + Memory::to_hex_string(static_cast<uint8_t>(opcode)));
+            Opcode opcode = static_cast<Opcode>(instruction & 0x7F);
+            LOG_DEBUG("Decoding instruction: 0x" + Memory::to_hex_string(instruction) + " with opcode: 0x" + Memory::to_hex_string(static_cast<uint8_t>(opcode)));
 
-        switch (opcode)
-        {
-        case Opcode::R_TYPE:
-        {
-            RType r_type = {
-                static_cast<RTypeFunct3>((instruction >> 12) & 0x7), // funct3
-                static_cast<Funct7>((instruction >> 25) & 0x7F),     // funct7
-                static_cast<uint8_t>((instruction >> 7) & 0x1F),     // rd
-                static_cast<uint8_t>((instruction >> 15) & 0x1F),    // rs1
-                static_cast<uint8_t>((instruction >> 20) & 0x1F)     // rs2
-            };
-            LOG_DEBUG("Decoded R-Type: funct3=" + std::to_string(static_cast<uint8_t>(r_type.funct3)) +
-                      ", funct7=" + std::to_string(static_cast<uint8_t>(r_type.funct7)) +
-                      ", rd=" + std::to_string(r_type.rd) +
-                      ", rs1=" + std::to_string(r_type.rs1) +
-                      ", rs2=" + std::to_string(r_type.rs2));
-            pipeline.decode.decoded_instruction = r_type;
-            break;
-        }
-        case Opcode::I_TYPE_LOAD:
-        {
-            IType i_type = {
-                static_cast<ITypeFunct3>((instruction >> 12) & 0x7), // funct3
-                static_cast<uint8_t>((instruction >> 7) & 0x1F),     // rd
-                static_cast<uint8_t>((instruction >> 15) & 0x1F),    // rs1
-                static_cast<int32_t>(instruction) >> 20              // imm
-            };
-            LOG_DEBUG("Decoded I-Type Load: funct3=" + std::to_string(static_cast<uint8_t>(i_type.funct3)) +
-                      ", rd=" + std::to_string(i_type.rd) +
-                      ", rs1=" + std::to_string(i_type.rs1) +
-                      ", imm=" + std::to_string(i_type.imm));
-            pipeline.decode.decoded_instruction = i_type;
-            break;
-        }
-        case Opcode::I_TYPE_ALU:
-        {
-            IType i_type = {
-                static_cast<ITypeFunct3>((instruction >> 12) & 0x7), // funct3
-                static_cast<uint8_t>((instruction >> 7) & 0x1F),     // rd
-                static_cast<uint8_t>((instruction >> 15) & 0x1F),    // rs1
-                static_cast<int32_t>(instruction) >> 20              // imm
-            };
-            LOG_DEBUG("Decoded I-Type ALU: funct3=" + std::to_string(static_cast<uint8_t>(i_type.funct3)) +
-                      ", rd=" + std::to_string(i_type.rd) +
-                      ", rs1=" + std::to_string(i_type.rs1) +
-                      ", imm=" + std::to_string(i_type.imm));
-            pipeline.decode.decoded_instruction = i_type;
-            break;
-        }
-        case Opcode::JALR:
-        {
-            IType i_type = {
-                static_cast<ITypeFunct3>((instruction >> 12) & 0x7), // funct3
-                static_cast<uint8_t>((instruction >> 7) & 0x1F),     // rd
-                static_cast<uint8_t>((instruction >> 15) & 0x1F),    // rs1
-                static_cast<int32_t>(instruction) >> 20              // imm
-            };
-            LOG_DEBUG("Decoded JALR: funct3=" + std::to_string(static_cast<uint8_t>(i_type.funct3)) +
-                      ", rd=" + std::to_string(i_type.rd) +
-                      ", rs1=" + std::to_string(i_type.rs1) +
-                      ", imm=" + std::to_string(i_type.imm));
-            pipeline.decode.decoded_instruction = i_type;
-            break;
-        }
-        case Opcode::S_TYPE:
-        {
-            int32_t imm = ((instruction >> 7) & 0x1F) | ((instruction >> 25) << 5);
-            if (imm & 0x800)
-                imm |= 0xFFFFF000; // Sign-extend the immediate value
-            SType s_type = {
-                static_cast<STypeFunct3>((instruction >> 12) & 0x7), // funct3
-                static_cast<uint8_t>((instruction >> 15) & 0x1F),    // rs1
-                static_cast<uint8_t>((instruction >> 20) & 0x1F),    // rs2
-                imm                                                  // imm
-            };
-            LOG_DEBUG("Decoded S-Type: imm=" + std::to_string(s_type.imm) +
-                      ", rs1=" + std::to_string(s_type.rs1) +
-                      ", rs2=" + std::to_string(s_type.rs2) +
-                      ", funct3=" + std::to_string(static_cast<uint8_t>(s_type.funct3)));
-            pipeline.decode.decoded_instruction = s_type;
-            break;
-        }
-        case Opcode::B_TYPE:
-        {
-            int32_t imm = ((instruction >> 7) & 0x1E) | ((instruction >> 25) << 5) | ((instruction & 0x80) << 4) | ((instruction & 0x80000000) >> 19);
-            if (imm & 0x1000)
-                imm |= 0xFFFFE000; // Sign-extend the immediate value
-            BType b_type = {
-                static_cast<BTypeFunct3>((instruction >> 12) & 0x7), // funct3
-                static_cast<uint8_t>((instruction >> 15) & 0x1F),    // rs1
-                static_cast<uint8_t>((instruction >> 20) & 0x1F),    // rs2
-                imm                                                  // imm
-            };
-            LOG_DEBUG("Decoded B-Type: imm=" + std::to_string(b_type.imm) +
-                      ", rs1=" + std::to_string(b_type.rs1) +
-                      ", rs2=" + std::to_string(b_type.rs2) +
-                      ", funct3=" + std::to_string(static_cast<uint8_t>(b_type.funct3)));
-            pipeline.decode.decoded_instruction = b_type;
-            break;
-        }
-        case Opcode::J_TYPE:
-        {
-            JType j_type = {
-                static_cast<uint8_t>((instruction >> 7) & 0x1F), // rd
-                static_cast<int32_t>(
-                    ((instruction >> 21) & 0x3FF) |               // imm[10:1]
-                    ((instruction >> 20) & 0x1) << 11 |           // imm[11]
-                    ((instruction >> 12) & 0xFF) << 12 |          // imm[19:12]
-                    ((instruction & 0x80000000) ? 0xFFF00000 : 0) // imm[31]
-                    )};
-            LOG_DEBUG("Decoded J-Type: rd=" + std::to_string(j_type.rd) +
-                      ", imm=" + std::to_string(j_type.imm));
-            pipeline.decode.decoded_instruction = j_type;
-            break;
-        }
-        case Opcode::U_TYPE:
-        {
-            UType u_type = {
-                static_cast<uint8_t>((instruction >> 7) & 0x1F), // rd
-                static_cast<int32_t>(instruction & 0xFFFFF000)   // imm
-            };
-            LOG_DEBUG("Decoded U-Type: rd=" + std::to_string(u_type.rd) +
-                      ", imm=" + std::to_string(u_type.imm));
-            pipeline.decode.decoded_instruction = u_type;
-            break;
-        }
-        default:
-            LOG_ERROR("Unsupported instruction! Instruction: 0x" + Memory::to_hex_string(instruction));
-            throw std::runtime_error("Unsupported instruction! Instruction: 0x" + Memory::to_hex_string(instruction));
-        }
+            switch (opcode)
+            {
+            case Opcode::R_TYPE:
+            {
+                RType r_type = {
+                    static_cast<RTypeFunct3>((instruction >> 12) & 0x7), // funct3
+                    static_cast<Funct7>((instruction >> 25) & 0x7F),     // funct7
+                    static_cast<uint8_t>((instruction >> 7) & 0x1F),     // rd
+                    static_cast<uint8_t>((instruction >> 15) & 0x1F),    // rs1
+                    static_cast<uint8_t>((instruction >> 20) & 0x1F)     // rs2
+                };
+                LOG_DEBUG("Decoded R-Type: funct3=" + std::to_string(static_cast<uint8_t>(r_type.funct3)) +
+                          ", funct7=" + std::to_string(static_cast<uint8_t>(r_type.funct7)) +
+                          ", rd=" + std::to_string(r_type.rd) +
+                          ", rs1=" + std::to_string(r_type.rs1) +
+                          ", rs2=" + std::to_string(r_type.rs2));
+                pipeline.decode.decoded_instruction = r_type;
+                break;
+            }
+            case Opcode::I_TYPE_LOAD:
+            {
+                IType i_type = {
+                    static_cast<ITypeFunct3>((instruction >> 12) & 0x7), // funct3
+                    static_cast<uint8_t>((instruction >> 7) & 0x1F),     // rd
+                    static_cast<uint8_t>((instruction >> 15) & 0x1F),    // rs1
+                    static_cast<int32_t>(instruction) >> 20              // imm
+                };
+                LOG_DEBUG("Decoded I-Type Load: funct3=" + std::to_string(static_cast<uint8_t>(i_type.funct3)) +
+                          ", rd=" + std::to_string(i_type.rd) +
+                          ", rs1=" + std::to_string(i_type.rs1) +
+                          ", imm=" + std::to_string(i_type.imm));
+                pipeline.decode.decoded_instruction = i_type;
+                break;
+            }
+            case Opcode::I_TYPE_ALU:
+            {
+                IType i_type = {
+                    static_cast<ITypeFunct3>((instruction >> 12) & 0x7), // funct3
+                    static_cast<uint8_t>((instruction >> 7) & 0x1F),     // rd
+                    static_cast<uint8_t>((instruction >> 15) & 0x1F),    // rs1
+                    static_cast<int32_t>(instruction) >> 20              // imm
+                };
+                LOG_DEBUG("Decoded I-Type ALU: funct3=" + std::to_string(static_cast<uint8_t>(i_type.funct3)) +
+                          ", rd=" + std::to_string(i_type.rd) +
+                          ", rs1=" + std::to_string(i_type.rs1) +
+                          ", imm=" + std::to_string(i_type.imm));
+                pipeline.decode.decoded_instruction = i_type;
+                break;
+            }
+            case Opcode::JALR:
+            {
+                IType i_type = {
+                    static_cast<ITypeFunct3>((instruction >> 12) & 0x7), // funct3
+                    static_cast<uint8_t>((instruction >> 7) & 0x1F),     // rd
+                    static_cast<uint8_t>((instruction >> 15) & 0x1F),    // rs1
+                    static_cast<int32_t>(instruction) >> 20              // imm
+                };
+                LOG_DEBUG("Decoded JALR: funct3=" + std::to_string(static_cast<uint8_t>(i_type.funct3)) +
+                          ", rd=" + std::to_string(i_type.rd) +
+                          ", rs1=" + std::to_string(i_type.rs1) +
+                          ", imm=" + std::to_string(i_type.imm));
+                pipeline.decode.decoded_instruction = i_type;
+                break;
+            }
+            case Opcode::S_TYPE:
+            {
+                int32_t imm = ((instruction >> 7) & 0x1F) | ((instruction >> 25) << 5);
+                if (imm & 0x800)
+                    imm |= 0xFFFFF000; // Sign-extend the immediate value
+                SType s_type = {
+                    static_cast<STypeFunct3>((instruction >> 12) & 0x7), // funct3
+                    static_cast<uint8_t>((instruction >> 15) & 0x1F),    // rs1
+                    static_cast<uint8_t>((instruction >> 20) & 0x1F),    // rs2
+                    imm                                                  // imm
+                };
+                LOG_DEBUG("Decoded S-Type: imm=" + std::to_string(s_type.imm) +
+                          ", rs1=" + std::to_string(s_type.rs1) +
+                          ", rs2=" + std::to_string(s_type.rs2) +
+                          ", funct3=" + std::to_string(static_cast<uint8_t>(s_type.funct3)));
+                pipeline.decode.decoded_instruction = s_type;
+                break;
+            }
+            case Opcode::B_TYPE:
+            {
+                int32_t imm = ((instruction >> 7) & 0x1E) | ((instruction >> 25) << 5) | ((instruction & 0x80) << 4) | ((instruction & 0x80000000) >> 19);
+                if (imm & 0x1000)
+                    imm |= 0xFFFFE000; // Sign-extend the immediate value
+                BType b_type = {
+                    static_cast<BTypeFunct3>((instruction >> 12) & 0x7), // funct3
+                    static_cast<uint8_t>((instruction >> 15) & 0x1F),    // rs1
+                    static_cast<uint8_t>((instruction >> 20) & 0x1F),    // rs2
+                    imm                                                  // imm
+                };
+                LOG_DEBUG("Decoded B-Type: imm=" + std::to_string(b_type.imm) +
+                          ", rs1=" + std::to_string(b_type.rs1) +
+                          ", rs2=" + std::to_string(b_type.rs2) +
+                          ", funct3=" + std::to_string(static_cast<uint8_t>(b_type.funct3)));
+                pipeline.decode.decoded_instruction = b_type;
+                break;
+            }
+            case Opcode::J_TYPE:
+            {
+                JType j_type = {
+                    static_cast<uint8_t>((instruction >> 7) & 0x1F), // rd
+                    static_cast<int32_t>(
+                        ((instruction >> 21) & 0x3FF) |               // imm[10:1]
+                        ((instruction >> 20) & 0x1) << 11 |           // imm[11]
+                        ((instruction >> 12) & 0xFF) << 12 |          // imm[19:12]
+                        ((instruction & 0x80000000) ? 0xFFF00000 : 0) // imm[31]
+                        )};
+                LOG_DEBUG("Decoded J-Type: rd=" + std::to_string(j_type.rd) +
+                          ", imm=" + std::to_string(j_type.imm));
+                pipeline.decode.decoded_instruction = j_type;
+                break;
+            }
+            case Opcode::U_TYPE:
+            {
+                UType u_type = {
+                    static_cast<uint8_t>((instruction >> 7) & 0x1F), // rd
+                    static_cast<int32_t>(instruction & 0xFFFFF000)   // imm
+                };
+                LOG_DEBUG("Decoded U-Type: rd=" + std::to_string(u_type.rd) +
+                          ", imm=" + std::to_string(u_type.imm));
+                pipeline.decode.decoded_instruction = u_type;
+                break;
+            }
+            default:
+                LOG_ERROR("Unsupported instruction! Instruction: 0x" + Memory::to_hex_string(instruction));
+                throw std::runtime_error("Unsupported instruction! Instruction: 0x" + Memory::to_hex_string(instruction));
+            }
 
-        pipeline.decode.pc = pipeline.fetch.pc;
-        pipeline.decode.valid = true;
-        pipeline.fetch.valid = false;
-        LOG_DEBUG("Decoded instruction at address: 0x" + Memory::to_hex_string(pipeline.decode.pc));
+            pipeline.decode.pc = pipeline.fetch.pc;
+            pipeline.decode.valid = true;
+            pipeline.fetch.valid = false;
+        }
+        fetch_cv.notify_all();
+        execute_cv.notify_all();
     }
-    execute_cv.notify_all();
 }
 
 /**
@@ -211,83 +219,86 @@ void CPU::decode()
 void CPU::execute()
 {
     std::unique_lock<std::mutex> lock(execute_mutex);
-    execute_cv.wait(lock, [this]
-                    { return pipeline.decode.valid; });
+    while (running)
+    { // Add while loop with condition
+        execute_cv.wait(lock, [this]
+                        { return pipeline.decode.valid || !running; });
 
-    if (!pipeline.stall && pipeline.decode.valid)
-    {
-        auto &decoded = pipeline.decode.decoded_instruction;
-        pipeline.execute.instruction = decoded;
-        pipeline.execute.pc = pipeline.decode.pc;
-        pipeline.execute.valid = true;
-        pipeline.decode.valid = false;
+        if (!pipeline.stall && pipeline.decode.valid)
+        {
+            auto &decoded = pipeline.decode.decoded_instruction;
+            pipeline.execute.instruction = decoded;
+            pipeline.execute.pc = pipeline.decode.pc;
+            pipeline.execute.valid = true;
+            pipeline.decode.valid = false;
 
-        if (std::holds_alternative<RType>(decoded))
-        {
-            auto r_type = std::get<RType>(decoded);
-            // Forwarding logic
-            // if (pipeline.memory.valid && std::holds_alternative<RType>(pipeline.memory.instruction)) {
-            //     auto mem_r_type = std::get<RType>(pipeline.memory.instruction);
-            //     if (mem_r_type.rd == r_type.rs1) {
-            //         rs1_value = pipeline.memory.result;
-            //     }
-            //     if (mem_r_type.rd == r_type.rs2) {
-            //         rs2_value = pipeline.memory.result;
-            //     }
-            // }
-            pipeline.execute.alu_result = execute_r_type(r_type);
-        }
-        else if (std::holds_alternative<IType>(decoded))
-        {
-            auto i_type = std::get<IType>(decoded);
-            if (static_cast<Opcode>(pipeline.fetch.instruction & 0x7F) == Opcode::I_TYPE_ALU)
+            if (std::holds_alternative<RType>(decoded))
             {
+                auto r_type = std::get<RType>(decoded);
                 // Forwarding logic
                 // if (pipeline.memory.valid && std::holds_alternative<RType>(pipeline.memory.instruction)) {
                 //     auto mem_r_type = std::get<RType>(pipeline.memory.instruction);
-                //     if (mem_r_type.rd == i_type.rs1) {
+                //     if (mem_r_type.rd == r_type.rs1) {
                 //         rs1_value = pipeline.memory.result;
                 //     }
+                //     if (mem_r_type.rd == r_type.rs2) {
+                //         rs2_value = pipeline.memory.result;
+                //     }
                 // }
-                pipeline.execute.alu_result = execute_i_type(i_type);
+                pipeline.execute.alu_result = execute_r_type(r_type);
+            }
+            else if (std::holds_alternative<IType>(decoded))
+            {
+                auto i_type = std::get<IType>(decoded);
+                if (static_cast<Opcode>(pipeline.fetch.instruction & 0x7F) == Opcode::I_TYPE_ALU)
+                {
+                    // Forwarding logic
+                    // if (pipeline.memory.valid && std::holds_alternative<RType>(pipeline.memory.instruction)) {
+                    //     auto mem_r_type = std::get<RType>(pipeline.memory.instruction);
+                    //     if (mem_r_type.rd == i_type.rs1) {
+                    //         rs1_value = pipeline.memory.result;
+                    //     }
+                    // }
+                    pipeline.execute.alu_result = execute_i_type(i_type);
+                }
+                else
+                {
+                    int32_t sign_extended_imm = static_cast<int32_t>(i_type.imm);
+                    pipeline.execute.alu_result = registers[i_type.rs1].value + sign_extended_imm;
+                }
+            }
+            else if (std::holds_alternative<JType>(decoded))
+            {
+                auto j_type = std::get<JType>(decoded);
+                execute_j_type(j_type);
+            }
+            else if (std::holds_alternative<SType>(decoded))
+            {
+                auto s_type = std::get<SType>(decoded);
+
+                // Sign-extend the immediate value
+                int32_t sign_extended_imm = static_cast<int32_t>(s_type.imm);
+
+                // Perform the addition
+                pipeline.execute.alu_result = registers[s_type.rs1].value + sign_extended_imm;
+            }
+            else if (std::holds_alternative<BType>(decoded))
+            {
+                auto b_type = std::get<BType>(decoded);
+                execute_b_type(b_type);
+            }
+            else if (std::holds_alternative<UType>(decoded))
+            {
+                auto u_type = std::get<UType>(decoded);
+                pipeline.execute.alu_result = execute_u_type(u_type);
             }
             else
             {
-                int32_t sign_extended_imm = static_cast<int32_t>(i_type.imm);
-                pipeline.execute.alu_result = registers[i_type.rs1].value + sign_extended_imm;
+                LOG_ERROR("Unsupported instruction!");
+                throw std::runtime_error("Unsupported instruction!");
             }
+            mem_cv.notify_all();
         }
-        else if (std::holds_alternative<JType>(decoded))
-        {
-            auto j_type = std::get<JType>(decoded);
-            execute_j_type(j_type);
-        }
-        else if (std::holds_alternative<SType>(decoded))
-        {
-            auto s_type = std::get<SType>(decoded);
-
-            // Sign-extend the immediate value
-            int32_t sign_extended_imm = static_cast<int32_t>(s_type.imm);
-
-            // Perform the addition
-            pipeline.execute.alu_result = registers[s_type.rs1].value + sign_extended_imm;
-        }
-        else if (std::holds_alternative<BType>(decoded))
-        {
-            auto b_type = std::get<BType>(decoded);
-            execute_b_type(b_type);
-        }
-        else if (std::holds_alternative<UType>(decoded))
-        {
-            auto u_type = std::get<UType>(decoded);
-            pipeline.execute.alu_result = execute_u_type(u_type);
-        }
-        else
-        {
-            LOG_ERROR("Unsupported instruction!");
-            throw std::runtime_error("Unsupported instruction!");
-        }
-        mem_cv.notify_all();
     }
 }
 
@@ -359,64 +370,67 @@ uint32_t CPU::execute_i_type(const IType &instr)
 void CPU::mem()
 {
     std::unique_lock<std::mutex> lock(mem_mutex);
-    mem_cv.wait(lock, [this]
-                { return pipeline.execute.valid; });
+    while (running)
+    { // Add while loop with condition
+        mem_cv.wait(lock, [this]
+                    { return pipeline.execute.valid || !running; });
 
-    if (!pipeline.stall && pipeline.execute.valid)
-    {
-        auto &instr = pipeline.execute.instruction;
-        pipeline.memory.instruction = instr;
-        pipeline.memory.pc = pipeline.execute.pc;
-        pipeline.memory.valid = true;
-        pipeline.execute.valid = false;
-
-        if (std::holds_alternative<IType>(instr))
+        if (!pipeline.stall && pipeline.execute.valid && running)
         {
-            auto i_type = std::get<IType>(instr);
-            if (static_cast<Opcode>(pipeline.fetch.instruction & 0x7F) == Opcode::I_TYPE_LOAD)
+            auto &instr = pipeline.execute.instruction;
+            pipeline.memory.instruction = instr;
+            pipeline.memory.pc = pipeline.execute.pc;
+            pipeline.memory.valid = true;
+            pipeline.execute.valid = false;
+
+            if (std::holds_alternative<IType>(instr))
             {
-                uint32_t address = pipeline.execute.alu_result;
-                LOG_DEBUG("Executing memory load at address: 0x" + Memory::to_hex_string(address));
-                switch (i_type.funct3)
+                auto i_type = std::get<IType>(instr);
+                if (static_cast<Opcode>(pipeline.fetch.instruction & 0x7F) == Opcode::I_TYPE_LOAD)
                 {
-                case ITypeFunct3::LB:
-                    pipeline.memory.result = (int8_t)memory.load_byte(address);
+                    uint32_t address = pipeline.execute.alu_result;
+                    LOG_DEBUG("Executing memory load at address: 0x" + Memory::to_hex_string(address));
+                    switch (i_type.funct3)
+                    {
+                    case ITypeFunct3::LB:
+                        pipeline.memory.result = (int8_t)memory.load_byte(address);
+                        break;
+                    case ITypeFunct3::LH:
+                        pipeline.memory.result = (int16_t)memory.load_half_word(address);
+                        break;
+                    case ITypeFunct3::LW:
+                        pipeline.memory.result = memory.load_word(address);
+                        break;
+                    default:
+                        LOG_ERROR("Unsupported load function! Funct3: " + std::to_string(static_cast<uint8_t>(i_type.funct3)));
+                        std::cerr << "Unsupported load function! Funct3: " << static_cast<uint8_t>(i_type.funct3) << std::endl;
+                    }
+                    pipeline.write_back = {pipeline.memory.pc, i_type.rd, pipeline.memory.result, true};
+                }
+            }
+            else if (std::holds_alternative<SType>(instr))
+            {
+                auto s_type = std::get<SType>(instr);
+                uint32_t address = pipeline.execute.alu_result;
+                LOG_DEBUG("Executing memory store at address: 0x" + Memory::to_hex_string(address));
+                switch (s_type.funct3)
+                {
+                case STypeFunct3::SB:
+                    memory.store_byte(address, registers[s_type.rs2].value & 0xFF);
                     break;
-                case ITypeFunct3::LH:
-                    pipeline.memory.result = (int16_t)memory.load_half_word(address);
+                case STypeFunct3::SH:
+                    memory.store_half_word(address, registers[s_type.rs2].value & 0xFFFF);
                     break;
-                case ITypeFunct3::LW:
-                    pipeline.memory.result = memory.load_word(address);
+                case STypeFunct3::SW:
+                    memory.store_word(address, registers[s_type.rs2].value);
                     break;
                 default:
-                    LOG_ERROR("Unsupported load function! Funct3: " + std::to_string(static_cast<uint8_t>(i_type.funct3)));
-                    std::cerr << "Unsupported load function! Funct3: " << static_cast<uint8_t>(i_type.funct3) << std::endl;
+                    LOG_ERROR("Unsupported store function! Funct3: " + std::to_string(static_cast<uint8_t>(s_type.funct3)));
+                    std::cerr << "Unsupported store function! Funct3: " << static_cast<uint8_t>(s_type.funct3) << std::endl;
                 }
-                pipeline.write_back = {pipeline.memory.pc, i_type.rd, pipeline.memory.result, true};
             }
+            write_back_cv.notify_all();
         }
-        else if (std::holds_alternative<SType>(instr))
-        {
-            auto s_type = std::get<SType>(instr);
-            uint32_t address = pipeline.execute.alu_result;
-            LOG_DEBUG("Executing memory store at address: 0x" + Memory::to_hex_string(address));
-            switch (s_type.funct3)
-            {
-            case STypeFunct3::SB:
-                memory.store_byte(address, registers[s_type.rs2].value & 0xFF);
-                break;
-            case STypeFunct3::SH:
-                memory.store_half_word(address, registers[s_type.rs2].value & 0xFFFF);
-                break;
-            case STypeFunct3::SW:
-                memory.store_word(address, registers[s_type.rs2].value);
-                break;
-            default:
-                LOG_ERROR("Unsupported store function! Funct3: " + std::to_string(static_cast<uint8_t>(s_type.funct3)));
-                std::cerr << "Unsupported store function! Funct3: " << static_cast<uint8_t>(s_type.funct3) << std::endl;
-            }
-        }
-        write_back_cv.notify_all();
     }
 }
 
@@ -468,13 +482,18 @@ void CPU::run()
     //     print_registers();
     // }
 
+    running = true; // Set running flag to true
     start_threads();
 
     // Wait for the threads to finish
-    if (pipeline.fetch.instruction == 0x00008067)
+    while (running)
     {
-        stop_threads();
-        LOG_INFO("Encountered ret instruction. Terminating execution.");
+        if (pipeline.fetch.instruction == 0x00008067)
+        {
+            running = false; // Set running flag to false to stop the loop
+            stop_threads();
+            LOG_INFO("Encountered ret instruction. Terminating execution.");
+        }
     }
 
     // Dump CPU registers after executing the instruction
@@ -547,7 +566,7 @@ uint32_t CPU::execute_r_type(const RType &instr)
         if (instr.funct7 == Funct7::SLL)
         {
             result = registers[instr.rs1].value << (registers[instr.rs2].value & 0x1F);
-            LOG_DEBUG("Executed SLL: x" + std::to_string(instr.rd) + " = x" + std::to_string(instr.rs1) + " << " + std::to_string(registers[instr.rs2] & 0x1F));
+            LOG_DEBUG("Executed SLL: x" + std::to_string(instr.rd) + " = x" + std::to_string(instr.rs1) + " << " + std::to_string(registers[instr.rs2].value & 0x1F));
         }
         else if (instr.funct7 == Funct7::MULH)
         {
@@ -803,42 +822,45 @@ void CPU::print_registers() const
 void CPU::write_back()
 {
     std::unique_lock<std::mutex> lock(write_back_mutex);
-    write_back_cv.wait(lock, [this]
-                       { return pipeline.memory.valid; });
+    while (running)
+    { // Add while loop with condition
+        write_back_cv.wait(lock, [this]
+                           { return pipeline.memory.valid || !running; });
 
-    if (pipeline.memory.valid)
-    {
-        auto &instr = pipeline.memory.instruction;
-        pipeline.write_back.pc = pipeline.memory.pc;
-        pipeline.write_back.valid = true;
-        pipeline.memory.valid = false;
+        if (pipeline.memory.valid)
+        {
+            auto &instr = pipeline.memory.instruction;
+            pipeline.write_back.pc = pipeline.memory.pc;
+            pipeline.write_back.valid = true;
+            pipeline.memory.valid = false;
 
-        if (std::holds_alternative<RType>(instr))
-        {
-            auto r_type = std::get<RType>(instr);
-            registers[r_type.rd].value = pipeline.execute.alu_result;
-            LOG_DEBUG("Write-back R-Type: x" + std::to_string(r_type.rd) + " = " + std::to_string(pipeline.execute.alu_result));
-        }
-        else if (std::holds_alternative<IType>(instr))
-        {
-            if (static_cast<Opcode>(pipeline.fetch.instruction & 0x7F) == Opcode::I_TYPE_ALU)
+            if (std::holds_alternative<RType>(instr))
             {
-                auto i_type = std::get<IType>(instr);
-                registers[i_type.rd].value = pipeline.execute.alu_result;
-                LOG_DEBUG("Write-back I-Type: x" + std::to_string(i_type.rd) + " = " + Memory::to_hex_string(pipeline.execute.alu_result));
+                auto r_type = std::get<RType>(instr);
+                registers[r_type.rd].value = pipeline.execute.alu_result;
+                LOG_DEBUG("Write-back R-Type: x" + std::to_string(r_type.rd) + " = " + std::to_string(pipeline.execute.alu_result));
             }
-            else
+            else if (std::holds_alternative<IType>(instr))
             {
-                auto i_type = std::get<IType>(instr);
-                registers[i_type.rd].value = pipeline.memory.result;
-                LOG_DEBUG("Write-back I-Type: x" + std::to_string(i_type.rd) + " = " + Memory::to_hex_string(pipeline.memory.result));
+                if (static_cast<Opcode>(pipeline.fetch.instruction & 0x7F) == Opcode::I_TYPE_ALU)
+                {
+                    auto i_type = std::get<IType>(instr);
+                    registers[i_type.rd].value = pipeline.execute.alu_result;
+                    LOG_DEBUG("Write-back I-Type: x" + std::to_string(i_type.rd) + " = " + Memory::to_hex_string(pipeline.execute.alu_result));
+                }
+                else
+                {
+                    auto i_type = std::get<IType>(instr);
+                    registers[i_type.rd].value = pipeline.memory.result;
+                    LOG_DEBUG("Write-back I-Type: x" + std::to_string(i_type.rd) + " = " + Memory::to_hex_string(pipeline.memory.result));
+                }
             }
-        }
-        else if (std::holds_alternative<UType>(instr))
-        {
-            auto u_type = std::get<UType>(instr);
-            registers[u_type.rd].value = pipeline.execute.alu_result;
-            LOG_DEBUG("Write-back U-Type: x" + std::to_string(u_type.rd) + " = " + std::to_string(pipeline.execute.alu_result));
+            else if (std::holds_alternative<UType>(instr))
+            {
+                auto u_type = std::get<UType>(instr);
+                registers[u_type.rd].value = pipeline.execute.alu_result;
+                LOG_DEBUG("Write-back U-Type: x" + std::to_string(u_type.rd) + " = " + std::to_string(pipeline.execute.alu_result));
+            }
         }
     }
 }
@@ -851,16 +873,28 @@ void CPU::start_threads()
     mem_thread = std::thread(&CPU::mem, this);
     write_back_thread = std::thread(&CPU::write_back, this);
 
-    LOG_DEBUG("Started CPU threads");
+    LOG_INFO("Started CPU threads");
 }
 
 void CPU::stop_threads()
 {
-    fetch_thread.join();
-    decode_thread.join();
-    execute_thread.join();
-    mem_thread.join();
-    write_back_thread.join();
+    // Notify all condition variables to wake up waiting threads
+    fetch_cv.notify_all();
+    decode_cv.notify_all();
+    execute_cv.notify_all();
+    mem_cv.notify_all();
+    write_back_cv.notify_all();
 
-    LOG_DEBUG("Stopped CPU threads");
+    if(fetch_thread.joinable())
+        fetch_thread.join();
+    if(decode_thread.joinable())
+        decode_thread.join();
+    if(execute_thread.joinable())
+        execute_thread.join();
+    if(mem_thread.joinable())
+        mem_thread.join();
+    if(write_back_thread.joinable())
+        write_back_thread.join();
+
+    LOG_INFO("Stopped CPU threads");
 }

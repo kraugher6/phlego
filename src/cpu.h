@@ -367,6 +367,7 @@ private:
     Memory &memory;                     ///< Reference to the memory object.
     Pipeline pipeline;
     uint32_t pc;                        ///< Program Counter.
+    bool running;
     std::array<Register, 32> registers; ///< Registers with names.
     static constexpr std::array<const char *, 32> registerNames = {
         "zero", "ra", "sp", "gp", "tp", "t0", "t1", "t2",
