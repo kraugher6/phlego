@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <string>
+#include <mutex>
 
 // Define logging levels
 #define LOG_LEVEL_DEBUG 0
@@ -14,6 +15,23 @@
 #ifndef LOG_LEVEL
 #define LOG_LEVEL LOG_LEVEL_DEBUG
 #endif
+
+class Logger {
+public:
+    /**
+     * @brief Log a message.
+     *
+     * @param level The log level (e.g., "DEBUG", "INFO", "WARN", "ERROR").
+     * @param message The message to log.
+     * @param function The function name where the log is called.
+     * @param file The file name where the log is called.
+     * @param line The line number where the log is called.
+     */
+    static void log(const std::string& level, const std::string& message, const std::string& function, const std::string& file, int line);
+
+private:
+    static std::mutex log_mutex;
+};
 
 #if LOG_LEVEL <= LOG_LEVEL_ERROR
 #define LOG_ERROR(message) Logger::log("ERROR", message, __FUNCTION__, __FILE__, __LINE__)
@@ -39,23 +57,4 @@
 #define LOG_DEBUG(message)
 #endif
 
-/**
- * @brief Class for logging messages.
- */
-class Logger {
-public:
-    /**
-     * @brief Log a message.
-     *
-     * @param level The log level (e.g., "DEBUG", "INFO", "WARN", "ERROR").
-     * @param message The message to log.
-     * @param function The function name where the log is called.
-     * @param file The file name where the log is called.
-     * @param line The line number where the log is called.
-     */
-    static void log(const std::string& level, const std::string& message, const std::string& function, const std::string& file, int line) {
-        std::cerr << "[" << level << "] " << file << ":" << line << " (" << function << ") - " << message << std::endl;
-    }
-};
-
-#endif
+#endif // LOGGER_H
