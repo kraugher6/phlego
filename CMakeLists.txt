@@ -17,9 +17,11 @@ add_compile_definitions(LOG_LEVEL=${LOG_LEVEL})
 include_directories(${CMAKE_SOURCE_DIR}/src)
 
 # Source files
+# file(GLOB SOURCES "src/*.cpp")
 set(SOURCES
     src/cpu.cpp
     src/memory.cpp
+    src/logger.cpp
     src/main.cpp
 )
 
