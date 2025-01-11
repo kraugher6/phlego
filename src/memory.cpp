@@ -325,8 +325,7 @@ void Memory::store_word(uint32_t address, uint32_t value) {
 void Memory::print_memory(uint32_t start_address, uint32_t end_address) const {
     std::cout << "Memory state (0x" << std::hex << start_address << " - 0x" << end_address << "):" << std::endl;
     for (uint32_t addr = start_address; addr < end_address; addr += 4) {
-        uint32_t value = load_word(addr);
-        std::cout << "0x" << std::hex << addr << ": 0x" << value << std::endl;
+        std::cout << "0x" << std::hex << addr << ": 0x" << load_word(addr) << std::endl;
     }
 }
 
