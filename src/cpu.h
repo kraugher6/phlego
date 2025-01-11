@@ -5,6 +5,9 @@
 #include <variant>
 #include <array>
 #include <iostream>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
 
 /**
  * @brief Enum for R-Type funct3 values.
@@ -188,14 +191,14 @@ struct FetchStage
 
 struct DecodeStage
 {
-    std::variant<RType, IType, SType, BType, JType> decoded_instruction;
+    std::variant<RType, IType, SType, BType, JType, UType> decoded_instruction;
     uint32_t pc;
     bool valid = false;
 };
 
 struct ExecuteStage
 {
-    std::variant<RType, IType, SType, BType, JType> instruction;
+    std::variant<RType, IType, SType, BType, JType, UType> instruction;
     uint32_t pc;
     uint32_t alu_result;
     bool valid = false;
@@ -203,7 +206,7 @@ struct ExecuteStage
 
 struct MemoryStage
 {
-    std::variant<RType, IType, SType, BType, JType> instruction;
+    std::variant<RType, IType, SType, BType, JType, UType> instruction;
     uint32_t pc;
     uint32_t result;
     bool valid = false;
@@ -333,7 +336,7 @@ public:
      * @param instr The decoded U-Type instruction.
      * @return uint32_t The result of the ALU operation.
      */
-    uint32_t CPU::execute_u_type(const UType &instr);
+    uint32_t execute_u_type(const UType &instr);
 
     /**
      * @brief Set the program counter.
@@ -371,6 +374,23 @@ private:
         "s0", "s1", "a0", "a1", "a2", "a3", "a4", "a5",
         "a6", "a7", "s2", "s3", "s4", "s5", "s6", "s7",
         "s8", "s9", "s10", "s11", "t3", "t4", "t5", "t6"};
+    std::mutex fetch_mutex;
+    std::mutex decode_mutex;
+    std::mutex execute_mutex;
+    std::mutex mem_mutex;
+    std::mutex write_back_mutex;
+
+    std::condition_variable fetch_cv;
+    std::condition_variable decode_cv;
+    std::condition_variable execute_cv;
+    std::condition_variable mem_cv;
+    std::condition_variable write_back_cv;
+
+    std::thread fetch_thread;
+    std::thread decode_thread;
+    std::thread execute_thread;
+    std::thread mem_thread;
+    std::thread write_back_thread;
 };
 
 #endif
