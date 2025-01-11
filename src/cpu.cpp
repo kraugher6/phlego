@@ -794,6 +794,35 @@ bool CPU::detect_hazard()
                     return true; // Hazard detected
                 }
             }
+            else if (std::holds_alternative<IType>(exec_instr))
+            {
+                auto exec_i_type = std::get<IType>(exec_instr);
+                if (exec_i_type.rd == rs1)
+                {
+                    return true; // Hazard detected
+                }
+            }
+        }
+
+        if (pipeline.memory.valid)
+        {
+            auto &mem_instr = pipeline.memory.instruction;
+            if (std::holds_alternative<RType>(mem_instr))
+            {
+                auto mem_r_type = std::get<RType>(mem_instr);
+                if (mem_r_type.rd == rs1 || mem_r_type.rd == rs2)
+                {
+                    return true; // Hazard detected
+                }
+            }
+            else if (std::holds_alternative<IType>(mem_instr))
+            {
+                auto mem_i_type = std::get<IType>(mem_instr);
+                if (mem_i_type.rd == rs1)
+                {
+                    return true; // Hazard detected
+                }
+            }
         }
     }
 
