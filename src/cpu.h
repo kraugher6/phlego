@@ -111,7 +111,8 @@ enum class Opcode : uint8_t
     JALR = 0x67,
     S_TYPE = 0x23,
     B_TYPE = 0x63,
-    J_TYPE = 0x6F
+    J_TYPE = 0x6F,
+    U_TYPE = 0x37
 };
 
 /**
@@ -166,6 +167,15 @@ struct BType
     uint8_t rs1;        ///< Source register 1
     uint8_t rs2;        ///< Source register 2
     int32_t imm;        ///< Immediate value
+};
+
+/**
+ * @brief Struct for U-Type instructions.
+ */
+struct UType
+{
+    uint8_t rd;  ///< Destination register
+    int32_t imm; ///< Immediate value
 };
 
 // Pipeline stages
@@ -318,6 +328,14 @@ public:
     void execute_j_type(const JType &instr);
 
     /**
+     * @brief Execute a U-Type instruction.
+     *
+     * @param instr The decoded U-Type instruction.
+     * @return uint32_t The result of the ALU operation.
+     */
+    uint32_t CPU::execute_u_type(const UType &instr);
+
+    /**
      * @brief Set the program counter.
      *
      * @param address The address to set the program counter to.
@@ -348,7 +366,7 @@ private:
     Memory &memory;                     ///< Reference to the memory object.
     uint32_t pc;                        ///< Program Counter.
     std::array<Register, 32> registers; ///< Registers with names.
-    static constexpr std::array<const char*, 32> registerNames = {
+    static constexpr std::array<const char *, 32> registerNames = {
         "zero", "ra", "sp", "gp", "tp", "t0", "t1", "t2",
         "s0", "s1", "a0", "a1", "a2", "a3", "a4", "a5",
         "a6", "a7", "s2", "s3", "s4", "s5", "s6", "s7",

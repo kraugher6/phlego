@@ -171,6 +171,17 @@ void CPU::decode(Pipeline &pipeline)
             pipeline.decode.decoded_instruction = j_type;
             break;
         }
+        case Opcode::U_TYPE:
+        {
+            UType u_type = {
+                static_cast<uint8_t>((instruction >> 7) & 0x1F), // rd
+                static_cast<int32_t>(instruction & 0xFFFFF000)   // imm
+            };
+            LOG_DEBUG("Decoded U-Type: rd=" + std::to_string(u_type.rd) +
+                      ", imm=" + std::to_string(u_type.imm));
+            pipeline.decode.decoded_instruction = u_type;
+            break;
+        }
         default:
             LOG_ERROR("Unsupported instruction! Instruction: 0x" + Memory::to_hex_string(instruction));
             throw std::runtime_error("Unsupported instruction! Instruction: 0x" + Memory::to_hex_string(instruction));
@@ -252,6 +263,11 @@ void CPU::execute(Pipeline &pipeline)
         {
             auto b_type = std::get<BType>(decoded);
             execute_b_type(b_type);
+        }
+        else if (std::holds_alternative<UType>(decoded))
+        {
+            auto u_type = std::get<UType>(decoded);
+            pipeline.execute.alu_result = execute_u_type(u_type);
         }
         else
         {
@@ -658,6 +674,20 @@ void CPU::execute_j_type(const JType &instr)
 }
 
 /**
+ * @brief Execute a U-Type instruction.
+ *
+ * @param instr The decoded U-Type instruction.
+ * @return uint32_t The result of the ALU operation.
+ */
+uint32_t CPU::execute_u_type(const UType &instr)
+{
+    LOG_DEBUG("Executing U-Type instruction");
+    uint32_t result = instr.imm;
+    LOG_DEBUG("Executed LUI: x" + std::to_string(instr.rd) + " = " + std::to_string(instr.imm));
+    return result;
+}
+
+/**
  * @brief Set the program counter.
  *
  * @param address The address to set the program counter to.
@@ -724,9 +754,11 @@ bool CPU::detect_hazard(const Pipeline &pipeline)
 /**
  * @brief Print the CPU registers.
  */
-void CPU::print_registers() const {
+void CPU::print_registers() const
+{
     std::cout << "PC: 0x" << Memory::to_hex_string(pc) << std::endl;
-    for (size_t i = 0; i < 32; ++i) {
+    for (size_t i = 0; i < 32; ++i)
+    {
         std::cout << std::left << std::setw(4) << registers[i].name << ": "
                   << std::right << std::setw(8) << std::setfill(' ') << Memory::to_hex_string(registers[i].value) << std::endl;
     }
@@ -767,6 +799,12 @@ void CPU::write_back(Pipeline &pipeline)
                 registers[i_type.rd].value = pipeline.memory.result;
                 LOG_DEBUG("Write-back I-Type: x" + std::to_string(i_type.rd) + " = " + Memory::to_hex_string(pipeline.memory.result));
             }
+        }
+        else if (std::holds_alternative<UType>(instr))
+        {
+            auto u_type = std::get<UType>(instr);
+            registers[u_type.rd].value = pipeline.execute.alu_result;
+            LOG_DEBUG("Write-back U-Type: x" + std::to_string(u_type.rd) + " = " + std::to_string(pipeline.execute.alu_result));
         }
     }
 }
