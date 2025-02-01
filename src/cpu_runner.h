@@ -15,7 +15,7 @@ public:
 
 private:
     CPU &cpu;
-    bool running;
+    bool is_running;
     std::thread fetch_thread;
     std::thread decode_thread;
     std::thread execute_thread;

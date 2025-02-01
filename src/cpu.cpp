@@ -65,6 +65,7 @@ void CPU::fetch() {
                   Memory::to_hex_string(pipeline.fetch.pc));
         pc += 4;
         pipeline.fetch.valid = true;
+        pipeline.decode.pc = pipeline.fetch.pc;
     }
 }
 
@@ -228,9 +229,10 @@ void CPU::decode() {
                     Memory::to_hex_string(instruction));
         }
 
-        pipeline.decode.pc = pipeline.fetch.pc;
-        pipeline.decode.valid = true;
+        pipeline.execute.instruction = pipeline.decode.instruction;
+        pipeline.execute.pc = pipeline.decode.pc;
         pipeline.fetch.valid = false;
+        pipeline.decode.valid = true;
     }
 }
 
@@ -241,14 +243,10 @@ void CPU::decode() {
  */
 void CPU::execute() {
     if (!pipeline.stall && pipeline.decode.valid) {
-        auto &decoded = pipeline.decode.instruction;
-        pipeline.execute.instruction = decoded;
-        pipeline.execute.pc = pipeline.decode.pc;
-        pipeline.execute.valid = true;
         pipeline.decode.valid = false;
 
-        if (std::holds_alternative<RType>(decoded)) {
-            auto r_type = std::get<RType>(decoded);
+        if (std::holds_alternative<RType>(pipeline.execute.instruction)) {
+            auto r_type = std::get<RType>(pipeline.execute.instruction);
             // Forwarding logic
             // if (pipeline.memory.valid &&
             // std::holds_alternative<RType>(pipeline.memory.instruction)) {
@@ -262,8 +260,8 @@ void CPU::execute() {
             //     }
             // }
             pipeline.execute.alu_result = execute_r_type(r_type);
-        } else if (std::holds_alternative<IType>(decoded)) {
-            auto i_type = std::get<IType>(decoded);
+        } else if (std::holds_alternative<IType>(pipeline.execute.instruction)) {
+            auto i_type = std::get<IType>(pipeline.execute.instruction);
             if (static_cast<int>(i_type.funct3) == 0b000 && i_type.rd == 0 &&
                 i_type.rs1 == 1 && i_type.imm == 0) {
                 set_status_flag(StatusFlags::STATUS_HALT);
@@ -297,11 +295,11 @@ void CPU::execute() {
                 pipeline.execute.alu_result =
                     registers[i_type.rs1].value + sign_extended_imm;
             }
-        } else if (std::holds_alternative<JType>(decoded)) {
-            auto j_type = std::get<JType>(decoded);
+        } else if (std::holds_alternative<JType>(pipeline.execute.instruction)) {
+            auto j_type = std::get<JType>(pipeline.execute.instruction);
             execute_j_type(j_type);
-        } else if (std::holds_alternative<SType>(decoded)) {
-            auto s_type = std::get<SType>(decoded);
+        } else if (std::holds_alternative<SType>(pipeline.execute.instruction)) {
+            auto s_type = std::get<SType>(pipeline.execute.instruction);
 
             // Sign-extend the immediate value
             int32_t sign_extended_imm = static_cast<int32_t>(s_type.imm);
@@ -309,15 +307,142 @@ void CPU::execute() {
             // Perform the addition
             pipeline.execute.alu_result =
                 registers[s_type.rs1].value + sign_extended_imm;
-        } else if (std::holds_alternative<BType>(decoded)) {
-            auto b_type = std::get<BType>(decoded);
+        } else if (std::holds_alternative<BType>(pipeline.execute.instruction)) {
+            auto b_type = std::get<BType>(pipeline.execute.instruction);
             execute_b_type(b_type);
-        } else if (std::holds_alternative<UType>(decoded)) {
-            auto u_type = std::get<UType>(decoded);
+        } else if (std::holds_alternative<UType>(pipeline.execute.instruction)) {
+            auto u_type = std::get<UType>(pipeline.execute.instruction);
             pipeline.execute.alu_result = execute_u_type(u_type);
         } else {
             LOG_ERROR("Unsupported instruction!");
             throw std::runtime_error("Unsupported instruction!");
+        }
+
+        pipeline.memory.instruction = pipeline.execute.instruction;
+        pipeline.memory.pc = pipeline.execute.pc;
+        pipeline.execute.valid = true;
+    }
+}
+
+/**
+ * @brief Execute the memory stage.
+ *
+ * @param pipeline The pipeline state.
+ */
+void CPU::mem() {
+    if (!pipeline.stall && pipeline.execute.valid) {
+        pipeline.execute.valid = false;
+
+        if (std::holds_alternative<IType>(pipeline.memory.instruction)) {
+            auto i_type = std::get<IType>(pipeline.memory.instruction);
+            if (i_type.funct3 == ITypeFunct3::LB ||
+                i_type.funct3 == ITypeFunct3::LH ||
+                i_type.funct3 == ITypeFunct3::LW ||
+                i_type.funct3 == ITypeFunct3::LBU ||
+                i_type.funct3 == ITypeFunct3::LHU) {
+                uint32_t address = pipeline.execute.alu_result;
+                LOG_DEBUG("Executing memory load at address: 0x" +
+                          Memory::to_hex_string(address));
+                switch (i_type.funct3) {
+                    case ITypeFunct3::LB:
+                        pipeline.memory.result =
+                            (int8_t)memory.load_byte(address);
+                        break;
+                    case ITypeFunct3::LH:
+                        pipeline.memory.result =
+                            (int16_t)memory.load_half_word(address);
+                        break;
+                    case ITypeFunct3::LW:
+                        pipeline.memory.result = memory.load_word(address);
+                        break;
+                    default:
+                        LOG_ERROR("Unsupported load function! Funct3: " +
+                                  std::to_string(
+                                      static_cast<uint8_t>(i_type.funct3)));
+                        std::cerr << "Unsupported load function! Funct3: "
+                                  << static_cast<uint8_t>(i_type.funct3)
+                                  << std::endl;
+                }
+                pipeline.write_back.rd = i_type.rd;
+                pipeline.write_back.result = pipeline.memory.result;
+            }
+        } else if (std::holds_alternative<SType>(pipeline.memory.instruction)) {
+            auto s_type = std::get<SType>(pipeline.memory.instruction);
+            uint32_t address = pipeline.execute.alu_result;
+            LOG_DEBUG("Executing memory store at address: 0x" +
+                      Memory::to_hex_string(address));
+            switch (s_type.funct3) {
+                case STypeFunct3::SB:
+                    memory.store_byte(address,
+                                      registers[s_type.rs2].value & 0xFF);
+                    break;
+                case STypeFunct3::SH:
+                    memory.store_half_word(
+                        address, registers[s_type.rs2].value & 0xFFFF);
+                    break;
+                case STypeFunct3::SW:
+                    memory.store_word(address, registers[s_type.rs2].value);
+                    break;
+                default:
+                    LOG_ERROR(
+                        "Unsupported store function! Funct3: " +
+                        std::to_string(static_cast<uint8_t>(s_type.funct3)));
+                    std::cerr << "Unsupported store function! Funct3: "
+                              << static_cast<uint8_t>(s_type.funct3)
+                              << std::endl;
+            }
+        }
+
+        pipeline.write_back.instruction = pipeline.memory.instruction;
+        pipeline.write_back.pc = pipeline.memory.pc;
+        pipeline.memory.valid = true;
+    }
+}
+
+/**
+ * @brief Execute the write-back stage.
+ *
+ * @param pipeline The pipeline state.
+ */
+void CPU::write_back() {
+    if (pipeline.memory.valid) {
+        pipeline.memory.valid = false;
+
+        if (std::holds_alternative<RType>(pipeline.write_back.instruction)) {
+            auto r_type = std::get<RType>(pipeline.write_back.instruction);
+            registers[r_type.rd].value = pipeline.execute.alu_result;
+            LOG_DEBUG("Write-back R-Type: x" + std::to_string(r_type.rd) +
+                      " = " + std::to_string(pipeline.execute.alu_result));
+        } else if (std::holds_alternative<IType>(pipeline.write_back.instruction)) {
+            auto i_type = std::get<IType>(pipeline.write_back.instruction);
+            if (i_type.funct3 == ITypeFunct3::ADDI ||
+                i_type.funct3 == ITypeFunct3::SLTI ||
+                i_type.funct3 == ITypeFunct3::SLTIU ||
+                i_type.funct3 == ITypeFunct3::XORI ||
+                i_type.funct3 == ITypeFunct3::ORI ||
+                i_type.funct3 == ITypeFunct3::ANDI ||
+                i_type.funct3 == ITypeFunct3::SLLI ||
+                i_type.funct3 == ITypeFunct3::SRLI ||
+                i_type.funct3 == ITypeFunct3::SRAI) {
+                registers[i_type.rd].value = pipeline.execute.alu_result;
+                LOG_DEBUG("Write-back I-Type: x" + std::to_string(i_type.rd) +
+                          " = " +
+                          Memory::to_hex_string(pipeline.execute.alu_result));
+            } else if (i_type.funct3 == ITypeFunct3::LB ||
+                       i_type.funct3 == ITypeFunct3::LH ||
+                       i_type.funct3 == ITypeFunct3::LW ||
+                       i_type.funct3 == ITypeFunct3::LBU ||
+                       i_type.funct3 == ITypeFunct3::LHU) {
+                registers[i_type.rd].value = pipeline.memory.result;
+                LOG_DEBUG("Write-back I-Type: x" + std::to_string(i_type.rd) +
+                          " = " +
+                          Memory::to_hex_string(pipeline.memory.result));
+            }
+        } else if (std::holds_alternative<UType>(pipeline.write_back.instruction)) {
+            auto u_type = std::get<UType>(pipeline.write_back.instruction);
+            registers[u_type.rd].value = pipeline.execute.alu_result;
+            LOG_DEBUG("Write-back U-Type: x" + std::to_string(u_type.rd) +
+                      " = " + std::to_string(pipeline.execute.alu_result));
         }
     }
 }
@@ -398,82 +523,6 @@ uint32_t CPU::execute_i_type(const IType &instr) {
                       << static_cast<uint8_t>(instr.funct3) << std::endl;
     }
     return result;
-}
-
-/**
- * @brief Execute the memory stage.
- *
- * @param pipeline The pipeline state.
- */
-void CPU::mem() {
-    if (!pipeline.stall && pipeline.execute.valid) {
-        auto &instr = pipeline.execute.instruction;
-        pipeline.memory.instruction = instr;
-        pipeline.memory.pc = pipeline.execute.pc;
-        pipeline.memory.valid = true;
-        pipeline.execute.valid = false;
-
-        if (std::holds_alternative<IType>(instr)) {
-            auto i_type = std::get<IType>(instr);
-            if (i_type.funct3 == ITypeFunct3::LB ||
-                i_type.funct3 == ITypeFunct3::LH ||
-                i_type.funct3 == ITypeFunct3::LW ||
-                i_type.funct3 == ITypeFunct3::LBU ||
-                i_type.funct3 == ITypeFunct3::LHU) {
-                uint32_t address = pipeline.execute.alu_result;
-                LOG_DEBUG("Executing memory load at address: 0x" +
-                          Memory::to_hex_string(address));
-                switch (i_type.funct3) {
-                    case ITypeFunct3::LB:
-                        pipeline.memory.result =
-                            (int8_t)memory.load_byte(address);
-                        break;
-                    case ITypeFunct3::LH:
-                        pipeline.memory.result =
-                            (int16_t)memory.load_half_word(address);
-                        break;
-                    case ITypeFunct3::LW:
-                        pipeline.memory.result = memory.load_word(address);
-                        break;
-                    default:
-                        LOG_ERROR("Unsupported load function! Funct3: " +
-                                  std::to_string(
-                                      static_cast<uint8_t>(i_type.funct3)));
-                        std::cerr << "Unsupported load function! Funct3: "
-                                  << static_cast<uint8_t>(i_type.funct3)
-                                  << std::endl;
-                }
-                pipeline.write_back = {pipeline.memory.instruction,
-                                       pipeline.memory.pc, i_type.rd,
-                                       pipeline.memory.result, true};
-            }
-        } else if (std::holds_alternative<SType>(instr)) {
-            auto s_type = std::get<SType>(instr);
-            uint32_t address = pipeline.execute.alu_result;
-            LOG_DEBUG("Executing memory store at address: 0x" +
-                      Memory::to_hex_string(address));
-            switch (s_type.funct3) {
-                case STypeFunct3::SB:
-                    memory.store_byte(address,
-                                      registers[s_type.rs2].value & 0xFF);
-                    break;
-                case STypeFunct3::SH:
-                    memory.store_half_word(
-                        address, registers[s_type.rs2].value & 0xFFFF);
-                    break;
-                case STypeFunct3::SW:
-                    memory.store_word(address, registers[s_type.rs2].value);
-                    break;
-                default:
-                    LOG_ERROR(
-                        "Unsupported store function! Funct3: " +
-                        std::to_string(static_cast<uint8_t>(s_type.funct3)));
-                    std::cerr << "Unsupported store function! Funct3: "
-                              << static_cast<uint8_t>(s_type.funct3)
-                              << std::endl;
-            }
-        }
-    }
 }
 
 /**
@@ -833,57 +882,6 @@ void CPU::print_registers() const {
                   << Memory::to_hex_string(registers[i].value) << std::endl;
     }
     std::cout << std::endl;
-}
-
-/**
- * @brief Execute the write-back stage.
- *
- * @param pipeline The pipeline state.
- */
-void CPU::write_back() {
-    if (pipeline.memory.valid) {
-        auto &instr = pipeline.memory.instruction;
-        pipeline.write_back.pc = pipeline.memory.pc;
-        pipeline.write_back.valid = true;
-        pipeline.memory.valid = false;
-
-        if (std::holds_alternative<RType>(instr)) {
-            auto r_type = std::get<RType>(instr);
-            registers[r_type.rd].value = pipeline.execute.alu_result;
-            LOG_DEBUG("Write-back R-Type: x" + std::to_string(r_type.rd) +
-                      " = " + std::to_string(pipeline.execute.alu_result));
-        } else if (std::holds_alternative<IType>(instr)) {
-            auto i_type = std::get<IType>(instr);
-            if (i_type.funct3 == ITypeFunct3::ADDI ||
-                i_type.funct3 == ITypeFunct3::SLTI ||
-                i_type.funct3 == ITypeFunct3::SLTIU ||
-                i_type.funct3 == ITypeFunct3::XORI ||
-                i_type.funct3 == ITypeFunct3::ORI ||
-                i_type.funct3 == ITypeFunct3::ANDI ||
-                i_type.funct3 == ITypeFunct3::SLLI ||
-                i_type.funct3 == ITypeFunct3::SRLI ||
-                i_type.funct3 == ITypeFunct3::SRAI) {
-                registers[i_type.rd].value = pipeline.execute.alu_result;
-                LOG_DEBUG("Write-back I-Type: x" + std::to_string(i_type.rd) +
-                          " = " +
-                          Memory::to_hex_string(pipeline.execute.alu_result));
-            } else if (i_type.funct3 == ITypeFunct3::LB ||
-                       i_type.funct3 == ITypeFunct3::LH ||
-                       i_type.funct3 == ITypeFunct3::LW ||
-                       i_type.funct3 == ITypeFunct3::LBU ||
-                       i_type.funct3 == ITypeFunct3::LHU) {
-                registers[i_type.rd].value = pipeline.memory.result;
-                LOG_DEBUG("Write-back I-Type: x" + std::to_string(i_type.rd) +
-                          " = " +
-                          Memory::to_hex_string(pipeline.memory.result));
-            }
-        } else if (std::holds_alternative<UType>(instr)) {
-            auto u_type = std::get<UType>(instr);
-            registers[u_type.rd].value = pipeline.execute.alu_result;
-            LOG_DEBUG("Write-back U-Type: x" + std::to_string(u_type.rd) +
-                      " = " + std::to_string(pipeline.execute.alu_result));
-        }
-    }
 }
 
 /**
