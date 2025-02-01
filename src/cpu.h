@@ -254,11 +254,6 @@ public:
     CPU(Memory &memory);
 
     /**
-     * @brief Execute the fetch-decode-run cycle.
-     */
-    void run();
-
-    /**
      * @brief Fetch the next instruction from memory.
      *
      */
@@ -345,6 +340,20 @@ public:
     void set_pc(uint32_t address);
 
     /**
+     * @brief Get the program counter.
+     *
+     * @return uint32_t The program counter.
+     */
+    uint32_t get_pc() const;
+
+    /**
+     * @brief Get the text size.
+     *
+     * @return uint32_t The text size.
+     */
+    uint32_t get_text_size() const;
+
+    /**
      * @brief Set the stack pointer.
      *
      * @param address The address to set the stack pointer to.
@@ -367,34 +376,12 @@ private:
     Memory &memory;                     ///< Reference to the memory object.
     Pipeline pipeline;
     uint32_t pc;                        ///< Program Counter.
-    bool running;
     std::array<Register, 32> registers; ///< Registers with names.
     static constexpr std::array<const char *, 32> registerNames = {
         "zero", "ra", "sp", "gp", "tp", "t0", "t1", "t2",
         "s0", "s1", "a0", "a1", "a2", "a3", "a4", "a5",
         "a6", "a7", "s2", "s3", "s4", "s5", "s6", "s7",
         "s8", "s9", "s10", "s11", "t3", "t4", "t5", "t6"};
-
-    void start_threads();
-    void stop_threads();
-
-    std::mutex fetch_mutex;
-    std::mutex decode_mutex;
-    std::mutex execute_mutex;
-    std::mutex mem_mutex;
-    std::mutex write_back_mutex;
-
-    std::condition_variable fetch_cv;
-    std::condition_variable decode_cv;
-    std::condition_variable execute_cv;
-    std::condition_variable mem_cv;
-    std::condition_variable write_back_cv;
-
-    std::thread fetch_thread;
-    std::thread decode_thread;
-    std::thread execute_thread;
-    std::thread mem_thread;
-    std::thread write_back_thread;
 };
 
 #endif

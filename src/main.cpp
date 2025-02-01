@@ -1,5 +1,6 @@
 #include <iostream>
 #include "cpu.h"
+#include "cpu_runner.h"
 #include "memory.h"
 #include "logger.h"
 
@@ -12,12 +13,13 @@
  */
 int main(int argc, char* argv[]) {
     if (argc != 2) {
-        LOG_ERROR("Usage: emulator <log_level> <path_to_elf> <path_to_disassembled>");
+        LOG_ERROR("Usage: emulator <path_to_elf>");
         return 1;
     }
 
     Memory memory(1024 * 1024); // 1 MB of memory
     CPU cpu(memory);
+    CPURunner runner(cpu);
 
     // if (!memory.load_from_map(argv[1])) {
     //     LOG_ERROR("Failed to load ELF file: " + std::string(argv[2]));
@@ -41,7 +43,7 @@ int main(int argc, char* argv[]) {
     cpu.set_pc(memory.get_initial_address());
 
     try {
-        cpu.run();
+        runner.run();
     } catch (const std::exception& e) {
         LOG_ERROR("Error: " + std::string(e.what()));
         return 1;

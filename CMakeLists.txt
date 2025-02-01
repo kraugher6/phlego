@@ -20,6 +20,7 @@ include_directories(${CMAKE_SOURCE_DIR}/src)
 # file(GLOB SOURCES "src/*.cpp")
 set(SOURCES
     src/cpu.cpp
+    src/cpu_runner.cpp
     src/memory.cpp
     src/logger.cpp
     src/main.cpp
