@@ -5,8 +5,6 @@
 CPURunner::CPURunner(CPU &cpu) : cpu(cpu), running(false) {}
 
 void CPURunner::run() {
-    uint32_t initial_pc = cpu.get_pc();
-    uint32_t text_size = cpu.get_text_size();
     running = true;
     fetch_thread = std::thread(&CPURunner::fetch_thread_function, this);
     decode_thread = std::thread(&CPURunner::decode_thread_function, this);
@@ -18,10 +16,12 @@ void CPURunner::run() {
     LOG_INFO("Started CPU threads");
 
     while (running) {
-        if (cpu.get_pc() >= initial_pc + text_size) {
+        if (cpu.is_halted()) {
             running = false;
             stop();
-            LOG_INFO("Encountered ret instruction. Terminating execution.");
+            LOG_INFO(
+                "Encountered halt flag. Terminating "
+                "execution.");
         }
     }
 
