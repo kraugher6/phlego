@@ -115,6 +115,16 @@ enum class Opcode : uint8_t
 };
 
 /**
+ * @brief Enum for status flags.
+ */
+enum class StatusFlags : uint32_t
+{
+    STATUS_HALT = 1 << 0,
+    STATUS_DIV_ZERO = 1 << 1,
+    // Add other status flags as needed
+};
+
+/**
  * @brief Struct for R-Type instructions.
  */
 struct RType
@@ -366,10 +376,46 @@ public:
     bool can_mem();
     bool can_write_back();
 
+    /**
+     * @brief Get the status register.
+     *
+     * @return uint32_t The status register.
+     */
+    uint32_t get_status() const;
+
+    /**
+     * @brief Set the status register.
+     *
+     * @param status The status to set.
+     */
+    void set_status(uint32_t status);
+
+    /**
+     * @brief Set a specific status flag.
+     *
+     * @param flag The status flag to set.
+     */
+    void set_status_flag(StatusFlags flag);
+
+    /**
+     * @brief Clear a specific status flag.
+     *
+     * @param flag The status flag to clear.
+     */
+    void clear_status_flag(uint32_t flag);
+
+    /**
+     * @brief Check if the CPU is halted.
+     *
+     * @return true if the CPU is halted, false otherwise.
+     */
+    bool is_halted() const;
+
 private:
     Memory &memory;                     ///< Reference to the memory object.
     Pipeline pipeline;
     uint32_t pc;                        ///< Program Counter.
+    uint32_t status;                    ///< Status register.
     std::array<Register, 32> registers; ///< Registers with names.
     static constexpr std::array<const char *, 32> registerNames = {
         "zero", "ra", "sp", "gp", "tp", "t0", "t1", "t2",

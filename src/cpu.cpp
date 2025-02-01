@@ -1,6 +1,7 @@
 #include "cpu.h"
 
 #include <array>
+#include <cstdint>
 #include <iomanip>
 #include <iostream>
 
@@ -251,18 +252,26 @@ void CPU::execute() {
             pipeline.execute.alu_result = execute_r_type(r_type);
         } else if (std::holds_alternative<IType>(decoded)) {
             auto i_type = std::get<IType>(decoded);
-            if (i_type.funct3 == ITypeFunct3::ADDI ||
-                i_type.funct3 == ITypeFunct3::SLTI ||
-                i_type.funct3 == ITypeFunct3::SLTIU ||
-                i_type.funct3 == ITypeFunct3::XORI ||
-                i_type.funct3 == ITypeFunct3::ORI ||
-                i_type.funct3 == ITypeFunct3::ANDI ||
-                i_type.funct3 == ITypeFunct3::SLLI ||
-                i_type.funct3 == ITypeFunct3::SRLI ||
-                i_type.funct3 == ITypeFunct3::SRAI) {
+            if (static_cast<int>(i_type.funct3) == 0b000 && i_type.rd == 0 &&
+                i_type.rs1 == 1 && i_type.imm == 0) {
+                set_status_flag(StatusFlags::STATUS_HALT);
+                LOG_INFO("Encountered ret instruction. Halting execution.");
+            } else if (i_type.funct3 == ITypeFunct3::ADDI ||
+                       i_type.funct3 == ITypeFunct3::SLTI ||
+                       i_type.funct3 == ITypeFunct3::SLTIU ||
+                       i_type.funct3 == ITypeFunct3::XORI ||
+                       i_type.funct3 == ITypeFunct3::ORI ||
+                       i_type.funct3 == ITypeFunct3::ANDI ||
+                       i_type.funct3 == ITypeFunct3::SLLI ||
+                       i_type.funct3 == ITypeFunct3::SRLI ||
+                       i_type.funct3 == ITypeFunct3::SRAI) {
 
                 pipeline.execute.alu_result = execute_i_type(i_type);
-            } else {
+            } else if (i_type.funct3 == ITypeFunct3::LB ||
+                       i_type.funct3 == ITypeFunct3::LH ||
+                       i_type.funct3 == ITypeFunct3::LW ||
+                       i_type.funct3 == ITypeFunct3::LBU ||
+                       i_type.funct3 == ITypeFunct3::LHU) {
                 int32_t sign_extended_imm = static_cast<int32_t>(i_type.imm);
                 pipeline.execute.alu_result =
                     registers[i_type.rs1].value + sign_extended_imm;
@@ -584,6 +593,7 @@ uint32_t CPU::execute_r_type(const RType &instr) {
             } else if (instr.funct7 == Funct7::DIV) {
                 if (registers[instr.rs2].value == 0) {
                     LOG_ERROR("Division by zero!");
+                    set_status_flag(StatusFlags::STATUS_DIV_ZERO);
                     throw std::runtime_error("Division by zero!");
                 }
                 result = (int32_t)registers[instr.rs1].value /
@@ -782,7 +792,11 @@ void CPU::write_back() {
                 LOG_DEBUG("Write-back I-Type: x" + std::to_string(i_type.rd) +
                           " = " +
                           Memory::to_hex_string(pipeline.execute.alu_result));
-            } else {
+            } else if (i_type.funct3 == ITypeFunct3::LB ||
+                       i_type.funct3 == ITypeFunct3::LH ||
+                       i_type.funct3 == ITypeFunct3::LW ||
+                       i_type.funct3 == ITypeFunct3::LBU ||
+                       i_type.funct3 == ITypeFunct3::LHU) {
                 registers[i_type.rd].value = pipeline.memory.result;
                 LOG_DEBUG("Write-back I-Type: x" + std::to_string(i_type.rd) +
                           " = " +
@@ -822,3 +836,25 @@ bool CPU::can_execute() { return pipeline.decode.valid; }
 bool CPU::can_mem() { return pipeline.execute.valid; }
 
 bool CPU::can_write_back() { return pipeline.memory.valid; }
+
+uint32_t CPU::get_status() const { return status; }
+
+void CPU::set_status(uint32_t status) {
+    this->status = status;
+    LOG_DEBUG("Status register set to: 0x" + Memory::to_hex_string(status));
+}
+
+void CPU::set_status_flag(StatusFlags flag) {
+    uint32_t mask = static_cast<uint32_t>(flag);
+    status |= mask;
+    LOG_DEBUG("Status flag set: 0x" + Memory::to_hex_string(mask));
+}
+
+void CPU::clear_status_flag(uint32_t flag) {
+    status &= ~flag;
+    LOG_DEBUG("Status flag cleared: 0x" + Memory::to_hex_string(flag));
+}
+
+bool CPU::is_halted() const {
+    return status & static_cast<uint32_t>(StatusFlags::STATUS_HALT);
+}
