@@ -6,6 +6,7 @@
 #include <cstring>
 #include <regex>
 #include <elfio/elfio.hpp>
+#include <iomanip>
 
 // Function to convert data based on endianness
 uint32_t convert_endianness(uint32_t value, ELFIO::elfio &reader)
@@ -401,6 +402,6 @@ void Memory::print_memory(uint32_t start_address, uint32_t end_address) const
 std::string Memory::to_hex_string(uint32_t value)
 {
     std::stringstream ss;
-    ss << "0x" << std::hex << value;
+    ss << "0x" << std::hex << std::setw(8) << std::setfill('0') << value;
     return ss.str();
 }

@@ -3,9 +3,7 @@
 
 #include "memory.h"
 #include <variant>
-#include <thread>
-#include <mutex>
-#include <condition_variable>
+#include <array>
 
 /**
  * @brief Enum for R-Type funct3 values.
@@ -189,7 +187,7 @@ struct FetchStage
 
 struct DecodeStage
 {
-    std::variant<RType, IType, SType, BType, JType, UType> decoded_instruction;
+    std::variant<RType, IType, SType, BType, JType, UType> instruction;
     uint32_t pc;
     bool valid = false;
 };
@@ -212,6 +210,7 @@ struct MemoryStage
 
 struct WriteBackStage
 {
+    std::variant<RType, IType, SType, BType, JType, UType> instruction;
     uint32_t pc;
     uint32_t rd;
     uint32_t result;
@@ -360,6 +359,12 @@ public:
      * @brief Print the CPU registers.
      */
     void print_registers() const;
+
+    bool can_fetch();
+    bool can_decode();
+    bool can_execute();
+    bool can_mem();
+    bool can_write_back();
 
 private:
     Memory &memory;                     ///< Reference to the memory object.
