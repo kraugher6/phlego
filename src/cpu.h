@@ -1,15 +1,15 @@
 #ifndef CPU_H
 #define CPU_H
 
-#include "memory.h"
-#include <variant>
 #include <array>
+#include <variant>
+
+#include "memory.h"
 
 /**
  * @brief Enum for R-Type funct3 values.
  */
-enum class RTypeFunct3 : uint8_t
-{
+enum class RTypeFunct3 : uint8_t {
     ADD = 0x0,
     SUB = 0x0,
     SLL = 0x1,
@@ -33,8 +33,7 @@ enum class RTypeFunct3 : uint8_t
 /**
  * @brief Enum for I-Type funct3 values.
  */
-enum class ITypeFunct3 : uint8_t
-{
+enum class ITypeFunct3 : uint8_t {
     ADDI = 0x0,
     SLTI = 0x2,
     SLTIU = 0x3,
@@ -54,18 +53,12 @@ enum class ITypeFunct3 : uint8_t
 /**
  * @brief Enum for S-Type funct3 values.
  */
-enum class STypeFunct3 : uint8_t
-{
-    SB = 0x0,
-    SH = 0x1,
-    SW = 0x2
-};
+enum class STypeFunct3 : uint8_t { SB = 0x0, SH = 0x1, SW = 0x2 };
 
 /**
  * @brief Enum for B-Type funct3 values.
  */
-enum class BTypeFunct3 : uint8_t
-{
+enum class BTypeFunct3 : uint8_t {
     BEQ = 0x0,
     BNE = 0x1,
     BLT = 0x4,
@@ -77,8 +70,7 @@ enum class BTypeFunct3 : uint8_t
 /**
  * @brief Enum for funct7 values.
  */
-enum class Funct7 : uint8_t
-{
+enum class Funct7 : uint8_t {
     ADD = 0x00,
     SUB = 0x20,
     SLL = 0x00,
@@ -102,8 +94,7 @@ enum class Funct7 : uint8_t
 /**
  * @brief Enum for opcodes.
  */
-enum class Opcode : uint8_t
-{
+enum class Opcode : uint8_t {
     R_TYPE = 0x33,
     I_TYPE_LOAD = 0x03,
     I_TYPE_ALU = 0x13,
@@ -117,109 +108,97 @@ enum class Opcode : uint8_t
 /**
  * @brief Enum for status flags.
  */
-enum class StatusFlags : uint32_t
-{
-    STATUS_HALT = 1 << 0,
-    STATUS_DIV_ZERO = 1 << 1,
+enum class StatusFlags : uint32_t {
+    HALT = 1 << 0,
+    DIV_ZERO = 1 << 1,
     // Add other status flags as needed
 };
 
 /**
  * @brief Struct for R-Type instructions.
  */
-struct RType
-{
-    RTypeFunct3 funct3; ///< Function 3 field
-    Funct7 funct7;      ///< Function 7 field
-    uint8_t rd;         ///< Destination register
-    uint8_t rs1;        ///< Source register 1
-    uint8_t rs2;        ///< Source register 2
+struct RType {
+    RTypeFunct3 funct3;  ///< Function 3 field
+    Funct7 funct7;       ///< Function 7 field
+    uint8_t rd;          ///< Destination register
+    uint8_t rs1;         ///< Source register 1
+    uint8_t rs2;         ///< Source register 2
 };
 
 /**
  * @brief Struct for I-Type instructions.
  */
-struct IType
-{
-    ITypeFunct3 funct3; ///< Function 3 field
-    uint8_t rd;         ///< Destination register
-    uint8_t rs1;        ///< Source register 1
-    int32_t imm;        ///< Immediate value
+struct IType {
+    ITypeFunct3 funct3;  ///< Function 3 field
+    uint8_t rd;          ///< Destination register
+    uint8_t rs1;         ///< Source register 1
+    int32_t imm;         ///< Immediate value
 };
 
 /**
  * @brief Struct for J-Type instructions.
  */
-struct JType
-{
-    uint8_t rd;  ///< Destination register
-    int32_t imm; ///< Immediate value
+struct JType {
+    uint8_t rd;   ///< Destination register
+    int32_t imm;  ///< Immediate value
 };
 
 /**
  * @brief Struct for S-Type instructions.
  */
-struct SType
-{
-    STypeFunct3 funct3; ///< Function 3 field
-    uint8_t rs1;        ///< Source register 1
-    uint8_t rs2;        ///< Source register 2
-    int32_t imm;        ///< Immediate value
+struct SType {
+    STypeFunct3 funct3;  ///< Function 3 field
+    uint8_t rs1;         ///< Source register 1
+    uint8_t rs2;         ///< Source register 2
+    int32_t imm;         ///< Immediate value
 };
 
 /**
  * @brief Struct for B-Type instructions.
  */
-struct BType
-{
-    BTypeFunct3 funct3; ///< Function 3 field
-    uint8_t rs1;        ///< Source register 1
-    uint8_t rs2;        ///< Source register 2
-    int32_t imm;        ///< Immediate value
+struct BType {
+    BTypeFunct3 funct3;  ///< Function 3 field
+    uint8_t rs1;         ///< Source register 1
+    uint8_t rs2;         ///< Source register 2
+    int32_t imm;         ///< Immediate value
 };
 
 /**
  * @brief Struct for U-Type instructions.
  */
-struct UType
-{
-    uint8_t rd;  ///< Destination register
-    int32_t imm; ///< Immediate value
+struct UType {
+    uint8_t rd;   ///< Destination register
+    int32_t imm;  ///< Immediate value
 };
 
 // Pipeline stages
-struct FetchStage
-{
+struct FetchStage {
     uint32_t instruction;
     uint32_t pc;
     bool valid = false;
 };
 
-struct DecodeStage
-{
+struct DecodeStage {
     std::variant<RType, IType, SType, BType, JType, UType> instruction;
     uint32_t pc;
     bool valid = false;
 };
 
-struct ExecuteStage
-{
+struct ExecuteStage {
     std::variant<RType, IType, SType, BType, JType, UType> instruction;
     uint32_t pc;
     uint32_t alu_result;
     bool valid = false;
 };
 
-struct MemoryStage
-{
+struct MemoryStage {
     std::variant<RType, IType, SType, BType, JType, UType> instruction;
     uint32_t pc;
     uint32_t result;
     bool valid = false;
 };
 
-struct WriteBackStage
-{
+struct WriteBackStage {
     std::variant<RType, IType, SType, BType, JType, UType> instruction;
     uint32_t pc;
     uint32_t rd;
@@ -228,21 +207,19 @@ struct WriteBackStage
 };
 
 // Pipeline state
-struct Pipeline
-{
+struct Pipeline {
     FetchStage fetch;
     DecodeStage decode;
     ExecuteStage execute;
     MemoryStage memory;
     WriteBackStage write_back;
-    bool stall = false; // Stall signal
+    bool stall = false;  // Stall signal
 };
 
 /**
  * @brief Struct representing a register with its value and name.
  */
-struct Register
-{
+struct Register {
     const char *name;
     uint32_t value;
 };
@@ -250,9 +227,8 @@ struct Register
 /**
  * @brief Class representing the CPU.
  */
-class CPU
-{
-public:
+class CPU {
+   public:
     /**
      * @brief Construct a new CPU object.
      *
@@ -411,7 +387,7 @@ public:
      *
      * @param flag The status flag to clear.
      */
-    void clear_status_flag(uint32_t flag);
+    void clear_status_flag(StatusFlags flag);
 
     /**
      * @brief Check if the CPU is halted.
@@ -420,17 +396,16 @@ public:
      */
     bool is_halted() const;
 
-private:
-    Memory &memory;                     ///< Reference to the memory object.
+   private:
+    Memory &memory;  ///< Reference to the memory object.
     Pipeline pipeline;
-    uint32_t pc;                        ///< Program Counter.
-    uint32_t status;                    ///< Status register.
-    std::array<Register, 32> registers; ///< Registers with names.
+    uint32_t pc;                         ///< Program Counter.
+    uint32_t status;                     ///< Status register.
+    std::array<Register, 32> registers;  ///< Registers with names.
     static constexpr std::array<const char *, 32> registerNames = {
-        "zero", "ra", "sp", "gp", "tp", "t0", "t1", "t2",
-        "s0", "s1", "a0", "a1", "a2", "a3", "a4", "a5",
-        "a6", "a7", "s2", "s3", "s4", "s5", "s6", "s7",
-        "s8", "s9", "s10", "s11", "t3", "t4", "t5", "t6"};
+        "zero", "ra", "sp", "gp", "tp",  "t0",  "t1", "t2", "s0", "s1", "a0",
+        "a1",   "a2", "a3", "a4", "a5",  "a6",  "a7", "s2", "s3", "s4", "s5",
+        "s6",   "s7", "s8", "s9", "s10", "s11", "t3", "t4", "t5", "t6"};
 };
 
 #endif

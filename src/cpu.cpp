@@ -7,6 +7,10 @@
 
 #include "logger.h"
 
+constexpr uint32_t OPCODE_MASK = 0x7F;
+constexpr uint32_t REGISTER_MASK = 0x1F;
+constexpr uint32_t SIGN_EXTEND_MASK = 0xFFFFF000;
+
 // #include <unordered_set>
 
 // const std::unordered_set<ITypeFunct3> I_TYPE_ALU_INSTRUCTIONS = {
@@ -56,7 +60,7 @@ CPU::CPU(Memory &memory) : memory(memory), pc(0) {
  * @param pipeline The pipeline state.
  */
 void CPU::fetch() {
-    if (!pipeline.fetch.valid) {
+    if (!pipeline.stall && !pipeline.fetch.valid) {
         pipeline.fetch.instruction = memory.load_word(pc);
         pipeline.fetch.pc = pc;
         LOG_DEBUG("Fetched instruction: 0x" +
@@ -83,7 +87,7 @@ void CPU::decode() {
                 "Unsupported instruction! Instruction: 0x0");
         }
 
-        Opcode opcode = static_cast<Opcode>(instruction & 0x7F);
+        Opcode opcode = static_cast<Opcode>(instruction & OPCODE_MASK);
         LOG_DEBUG("Decoding instruction: " +
                   Memory::to_hex_string(instruction) + " with opcode: " +
                   Memory::to_hex_string(static_cast<uint8_t>(opcode)));
@@ -92,11 +96,15 @@ void CPU::decode() {
             case Opcode::R_TYPE: {
                 RType r_type = {
                     static_cast<RTypeFunct3>((instruction >> 12) &
-                                             0x7),                     // funct3
-                    static_cast<Funct7>((instruction >> 25) & 0x7F),   // funct7
-                    static_cast<uint8_t>((instruction >> 7) & 0x1F),   // rd
-                    static_cast<uint8_t>((instruction >> 15) & 0x1F),  // rs1
-                    static_cast<uint8_t>((instruction >> 20) & 0x1F)   // rs2
+                                             0x7),  // funct3
+                    static_cast<Funct7>((instruction >> 25) &
+                                        OPCODE_MASK),  // funct7
+                    static_cast<uint8_t>((instruction >> 7) &
+                                         REGISTER_MASK),  // rd
+                    static_cast<uint8_t>((instruction >> 15) &
+                                         REGISTER_MASK),  // rs1
+                    static_cast<uint8_t>((instruction >> 20) &
+                                         REGISTER_MASK)  // rs2
                 };
                 LOG_DEBUG("Decoded R-Type: funct3=" +
                           std::to_string(static_cast<uint8_t>(r_type.funct3)) +
@@ -105,32 +113,61 @@ void CPU::decode() {
                           ", rd=" + std::to_string(r_type.rd) +
                           ", rs1=" + std::to_string(r_type.rs1) +
                           ", rs2=" + std::to_string(r_type.rs2));
+                // Hazard detection
+                // if (pipeline.execute.valid) {
+                //     auto &exec_instr = pipeline.execute.instruction;
+                //     if (std::holds_alternative<RType>(exec_instr)) {
+                //         auto exec_r_type = std::get<RType>(exec_instr);
+                //         if (exec_r_type.rd == r_type.rs1 ||
+                //             exec_r_type.rd == r_type.rs2) {
+                //             pipeline.stall = true;
+                //             return;  // Stall the pipeline
+                //         }
+                //     }
+                // }
                 pipeline.decode.instruction = r_type;
                 break;
             }
             case Opcode::I_TYPE_LOAD: {
                 IType i_type = {
                     static_cast<ITypeFunct3>((instruction >> 12) &
-                                             0x7),                     // funct3
-                    static_cast<uint8_t>((instruction >> 7) & 0x1F),   // rd
-                    static_cast<uint8_t>((instruction >> 15) & 0x1F),  // rs1
-                    static_cast<int32_t>(instruction) >> 20            // imm
+                                             0x7),  // funct3
+                    static_cast<uint8_t>((instruction >> 7) &
+                                         REGISTER_MASK),  // rd
+                    static_cast<uint8_t>((instruction >> 15) &
+                                         REGISTER_MASK),     // rs1
+                    static_cast<int32_t>(instruction) >> 20  // imm
                 };
                 LOG_DEBUG("Decoded I-Type Load: funct3=" +
                           std::to_string(static_cast<uint8_t>(i_type.funct3)) +
                           ", rd=" + std::to_string(i_type.rd) +
                           ", rs1=" + std::to_string(i_type.rs1) +
                           ", imm=" + std::to_string(i_type.imm));
+
+                // Hazard detection
+                // if (pipeline.execute.valid) {
+                //     auto &exec_instr = pipeline.execute.instruction;
+                //     if (std::holds_alternative<RType>(exec_instr)) {
+                //         auto exec_r_type = std::get<RType>(exec_instr);
+                //         if (exec_r_type.rd == i_type.rs1) {
+                //             pipeline.stall = true;
+                //             return;  // Stall the pipeline
+                //         }
+                //     }
+                // }
+
                 pipeline.decode.instruction = i_type;
                 break;
             }
             case Opcode::I_TYPE_ALU: {
                 IType i_type = {
                     static_cast<ITypeFunct3>((instruction >> 12) &
-                                             0x7),                     // funct3
-                    static_cast<uint8_t>((instruction >> 7) & 0x1F),   // rd
-                    static_cast<uint8_t>((instruction >> 15) & 0x1F),  // rs1
-                    static_cast<int32_t>(instruction) >> 20            // imm
+                                             0x7),  // funct3
+                    static_cast<uint8_t>((instruction >> 7) &
+                                         REGISTER_MASK),  // rd
+                    static_cast<uint8_t>((instruction >> 15) &
+                                         REGISTER_MASK),     // rs1
+                    static_cast<int32_t>(instruction) >> 20  // imm
                 };
                 LOG_DEBUG("Decoded I-Type ALU: funct3=" +
                           std::to_string(static_cast<uint8_t>(i_type.funct3)) +
@@ -143,10 +180,12 @@ void CPU::decode() {
             case Opcode::JALR: {
                 IType i_type = {
                     static_cast<ITypeFunct3>((instruction >> 12) &
-                                             0x7),                     // funct3
-                    static_cast<uint8_t>((instruction >> 7) & 0x1F),   // rd
-                    static_cast<uint8_t>((instruction >> 15) & 0x1F),  // rs1
-                    static_cast<int32_t>(instruction) >> 20            // imm
+                                             0x7),  // funct3
+                    static_cast<uint8_t>((instruction >> 7) &
+                                         REGISTER_MASK),  // rd
+                    static_cast<uint8_t>((instruction >> 15) &
+                                         REGISTER_MASK),     // rs1
+                    static_cast<int32_t>(instruction) >> 20  // imm
                 };
                 LOG_DEBUG("Decoded JALR: funct3=" +
                           std::to_string(static_cast<uint8_t>(i_type.funct3)) +
@@ -157,16 +196,18 @@ void CPU::decode() {
                 break;
             }
             case Opcode::S_TYPE: {
-                int32_t imm =
-                    ((instruction >> 7) & 0x1F) | ((instruction >> 25) << 5);
+                int32_t imm = ((instruction >> 7) & REGISTER_MASK) |
+                              ((instruction >> 25) << 5);
                 if (imm & 0x800)
-                    imm |= 0xFFFFF000;  // Sign-extend the immediate value
+                    imm |= SIGN_EXTEND_MASK;  // Sign-extend the immediate value
                 SType s_type = {
                     static_cast<STypeFunct3>((instruction >> 12) &
-                                             0x7),                     // funct3
-                    static_cast<uint8_t>((instruction >> 15) & 0x1F),  // rs1
-                    static_cast<uint8_t>((instruction >> 20) & 0x1F),  // rs2
-                    imm                                                // imm
+                                             0x7),  // funct3
+                    static_cast<uint8_t>((instruction >> 15) &
+                                         REGISTER_MASK),  // rs1
+                    static_cast<uint8_t>((instruction >> 20) &
+                                         REGISTER_MASK),  // rs2
+                    imm                                   // imm
                 };
                 LOG_DEBUG("Decoded S-Type: imm=" + std::to_string(s_type.imm) +
                           ", rs1=" + std::to_string(s_type.rs1) +
@@ -184,10 +225,12 @@ void CPU::decode() {
                     imm |= 0xFFFFE000;  // Sign-extend the immediate value
                 BType b_type = {
                     static_cast<BTypeFunct3>((instruction >> 12) &
-                                             0x7),                     // funct3
-                    static_cast<uint8_t>((instruction >> 15) & 0x1F),  // rs1
-                    static_cast<uint8_t>((instruction >> 20) & 0x1F),  // rs2
-                    imm                                                // imm
+                                             0x7),  // funct3
+                    static_cast<uint8_t>((instruction >> 15) &
+                                         REGISTER_MASK),  // rs1
+                    static_cast<uint8_t>((instruction >> 20) &
+                                         REGISTER_MASK),  // rs2
+                    imm                                   // imm
                 };
                 LOG_DEBUG("Decoded B-Type: imm=" + std::to_string(b_type.imm) +
                           ", rs1=" + std::to_string(b_type.rs1) +
@@ -198,7 +241,8 @@ void CPU::decode() {
             }
             case Opcode::J_TYPE: {
                 JType j_type = {
-                    static_cast<uint8_t>((instruction >> 7) & 0x1F),  // rd
+                    static_cast<uint8_t>((instruction >> 7) &
+                                         REGISTER_MASK),  // rd
                     static_cast<int32_t>(
                         ((instruction >> 21) & 0x3FF) |       // imm[10:1]
                         ((instruction >> 20) & 0x1) << 11 |   // imm[11]
@@ -213,8 +257,9 @@ void CPU::decode() {
             }
             case Opcode::U_TYPE: {
                 UType u_type = {
-                    static_cast<uint8_t>((instruction >> 7) & 0x1F),  // rd
-                    static_cast<int32_t>(instruction & 0xFFFFF000)    // imm
+                    static_cast<uint8_t>((instruction >> 7) &
+                                         REGISTER_MASK),                  // rd
+                    static_cast<int32_t>(instruction & SIGN_EXTEND_MASK)  // imm
                 };
                 LOG_DEBUG("Decoded U-Type: rd=" + std::to_string(u_type.rd) +
                           ", imm=" + std::to_string(u_type.imm));
@@ -247,24 +292,40 @@ void CPU::execute() {
 
         if (std::holds_alternative<RType>(pipeline.execute.instruction)) {
             auto r_type = std::get<RType>(pipeline.execute.instruction);
-            // Forwarding logic
-            // if (pipeline.memory.valid &&
-            // std::holds_alternative<RType>(pipeline.memory.instruction)) {
-            //     auto mem_r_type =
-            //     std::get<RType>(pipeline.memory.instruction); if
-            //     (mem_r_type.rd == r_type.rs1) {
-            //         rs1_value = pipeline.memory.result;
-            //     }
-            //     if (mem_r_type.rd == r_type.rs2) {
-            //         rs2_value = pipeline.memory.result;
-            //     }
-            // }
+
+            // Forwarding logic for rs1
+            if (pipeline.memory.valid &&
+                std::holds_alternative<RType>(pipeline.memory.instruction)) {
+                auto mem_r_type = std::get<RType>(pipeline.memory.instruction);
+                if (mem_r_type.rd == r_type.rs1 && mem_r_type.rd != 0) {
+                    registers[r_type.rs1].value = pipeline.memory.result;
+                }
+            } else if (pipeline.write_back.valid &&
+                       pipeline.write_back.rd == r_type.rs1 &&
+                       pipeline.write_back.rd != 0) {
+                registers[r_type.rs1].value = pipeline.write_back.result;
+            }
+
+            // Forwarding logic for rs2
+            if (pipeline.memory.valid &&
+                std::holds_alternative<RType>(pipeline.memory.instruction)) {
+                auto mem_r_type = std::get<RType>(pipeline.memory.instruction);
+                if (mem_r_type.rd == r_type.rs2 && mem_r_type.rd != 0) {
+                    registers[r_type.rs2].value = pipeline.memory.result;
+                }
+            } else if (pipeline.write_back.valid &&
+                       pipeline.write_back.rd == r_type.rs2 &&
+                       pipeline.write_back.rd != 0) {
+                registers[r_type.rs2].value = pipeline.write_back.result;
+            }
+
             pipeline.execute.alu_result = execute_r_type(r_type);
-        } else if (std::holds_alternative<IType>(pipeline.execute.instruction)) {
+        } else if (std::holds_alternative<IType>(
+                       pipeline.execute.instruction)) {
             auto i_type = std::get<IType>(pipeline.execute.instruction);
             if (static_cast<int>(i_type.funct3) == 0b000 && i_type.rd == 0 &&
                 i_type.rs1 == 1 && i_type.imm == 0) {
-                set_status_flag(StatusFlags::STATUS_HALT);
+                set_status_flag(StatusFlags::HALT);
                 LOG_INFO("Encountered ret instruction. Halting execution.");
             } else if (i_type.funct3 == ITypeFunct3::ADDI ||
                        i_type.funct3 == ITypeFunct3::SLTI ||
@@ -275,16 +336,19 @@ void CPU::execute() {
                        i_type.funct3 == ITypeFunct3::SLLI ||
                        i_type.funct3 == ITypeFunct3::SRLI ||
                        i_type.funct3 == ITypeFunct3::SRAI) {
-                // Forwarding logic
-                // if (pipeline.memory.valid &&
-                // std::holds_alternative<RType>(pipeline.memory.instruction))
-                // {
-                //     auto mem_r_type =
-                //     std::get<RType>(pipeline.memory.instruction); if
-                //     (mem_r_type.rd == i_type.rs1) {
-                //         rs1_value = pipeline.memory.result;
-                //     }
-                // }
+                // Forwarding logic for rs1
+                if (pipeline.memory.valid && std::holds_alternative<RType>(
+                                                 pipeline.memory.instruction)) {
+                    auto mem_r_type =
+                        std::get<RType>(pipeline.memory.instruction);
+                    if (mem_r_type.rd == i_type.rs1 && mem_r_type.rd != 0) {
+                        registers[i_type.rs1].value = pipeline.memory.result;
+                    }
+                } else if (pipeline.write_back.valid &&
+                           pipeline.write_back.rd == i_type.rs1 &&
+                           pipeline.write_back.rd != 0) {
+                    registers[i_type.rs1].value = pipeline.write_back.result;
+                }
                 pipeline.execute.alu_result = execute_i_type(i_type);
             } else if (i_type.funct3 == ITypeFunct3::LB ||
                        i_type.funct3 == ITypeFunct3::LH ||
@@ -295,10 +359,12 @@ void CPU::execute() {
                 pipeline.execute.alu_result =
                     registers[i_type.rs1].value + sign_extended_imm;
             }
-        } else if (std::holds_alternative<JType>(pipeline.execute.instruction)) {
+        } else if (std::holds_alternative<JType>(
+                       pipeline.execute.instruction)) {
             auto j_type = std::get<JType>(pipeline.execute.instruction);
             execute_j_type(j_type);
-        } else if (std::holds_alternative<SType>(pipeline.execute.instruction)) {
+        } else if (std::holds_alternative<SType>(
+                       pipeline.execute.instruction)) {
             auto s_type = std::get<SType>(pipeline.execute.instruction);
 
             // Sign-extend the immediate value
@@ -307,15 +373,18 @@ void CPU::execute() {
             // Perform the addition
             pipeline.execute.alu_result =
                 registers[s_type.rs1].value + sign_extended_imm;
-        } else if (std::holds_alternative<BType>(pipeline.execute.instruction)) {
+        } else if (std::holds_alternative<BType>(
+                       pipeline.execute.instruction)) {
             auto b_type = std::get<BType>(pipeline.execute.instruction);
             execute_b_type(b_type);
-        } else if (std::holds_alternative<UType>(pipeline.execute.instruction)) {
+        } else if (std::holds_alternative<UType>(
+                       pipeline.execute.instruction)) {
             auto u_type = std::get<UType>(pipeline.execute.instruction);
             pipeline.execute.alu_result = execute_u_type(u_type);
         } else {
             LOG_ERROR("Unsupported instruction!");
-            throw std::runtime_error("Unsupported instruction!");
+            throw std::runtime_error("Unsupported instruction at PC: 0x" +
+                                     Memory::to_hex_string(pc));
         }
 
         pipeline.memory.instruction = pipeline.execute.instruction;
@@ -413,7 +482,8 @@ void CPU::write_back() {
             registers[r_type.rd].value = pipeline.execute.alu_result;
             LOG_DEBUG("Write-back R-Type: x" + std::to_string(r_type.rd) +
                       " = " + std::to_string(pipeline.execute.alu_result));
-        } else if (std::holds_alternative<IType>(pipeline.write_back.instruction)) {
+        } else if (std::holds_alternative<IType>(
+                       pipeline.write_back.instruction)) {
             auto i_type = std::get<IType>(pipeline.write_back.instruction);
             if (i_type.funct3 == ITypeFunct3::ADDI ||
                 i_type.funct3 == ITypeFunct3::SLTI ||
@@ -438,7 +508,8 @@ void CPU::write_back() {
                           " = " +
                           Memory::to_hex_string(pipeline.memory.result));
             }
-        } else if (std::holds_alternative<UType>(pipeline.write_back.instruction)) {
+        } else if (std::holds_alternative<UType>(
+                       pipeline.write_back.instruction)) {
             auto u_type = std::get<UType>(pipeline.write_back.instruction);
             registers[u_type.rd].value = pipeline.execute.alu_result;
             LOG_DEBUG("Write-back U-Type: x" + std::to_string(u_type.rd) +
@@ -464,10 +535,10 @@ uint32_t CPU::execute_i_type(const IType &instr) {
                       std::to_string(instr.imm));
             break;
         case ITypeFunct3::SLLI:
-            result = registers[instr.rs1].value << (instr.imm & 0x1F);
+            result = registers[instr.rs1].value << (instr.imm & REGISTER_MASK);
             LOG_DEBUG("Executed SLLI: x" + std::to_string(instr.rd) + " = x" +
                       std::to_string(instr.rs1) + " << " +
-                      std::to_string(instr.imm & 0x1F));
+                      std::to_string(instr.imm & REGISTER_MASK));
             break;
         case ITypeFunct3::SLTI:
             result = (int32_t)registers[instr.rs1].value < (int32_t)instr.imm
@@ -492,16 +563,17 @@ uint32_t CPU::execute_i_type(const IType &instr) {
         case ITypeFunct3::SRLI:
             // case ITypeFunct3::SRAI:
             if ((instr.imm & 0x40000000) == 0) {
-                result = registers[instr.rs1].value >> (instr.imm & 0x1F);
+                result =
+                    registers[instr.rs1].value >> (instr.imm & REGISTER_MASK);
                 LOG_DEBUG("Executed SRLI: x" + std::to_string(instr.rd) +
                           " = x" + std::to_string(instr.rs1) + " >> " +
-                          std::to_string(instr.imm & 0x1F));
+                          std::to_string(instr.imm & REGISTER_MASK));
             } else {
-                result =
-                    (int32_t)registers[instr.rs1].value >> (instr.imm & 0x1F);
+                result = (int32_t)registers[instr.rs1].value >>
+                         (instr.imm & REGISTER_MASK);
                 LOG_DEBUG("Executed SRAI: x" + std::to_string(instr.rd) +
                           " = (int32_t)x" + std::to_string(instr.rs1) + " >> " +
-                          std::to_string(instr.imm & 0x1F));
+                          std::to_string(instr.imm & REGISTER_MASK));
             }
             break;
         case ITypeFunct3::ORI:
@@ -599,10 +671,11 @@ uint32_t CPU::execute_r_type(const RType &instr) {
             // case RTypeFunct3::MULH:
             if (instr.funct7 == Funct7::SLL) {
                 result = registers[instr.rs1].value
-                         << (registers[instr.rs2].value & 0x1F);
-                LOG_DEBUG("Executed SLL: x" + std::to_string(instr.rd) +
-                          " = x" + std::to_string(instr.rs1) + " << " +
-                          std::to_string(registers[instr.rs2].value & 0x1F));
+                         << (registers[instr.rs2].value & REGISTER_MASK);
+                LOG_DEBUG(
+                    "Executed SLL: x" + std::to_string(instr.rd) + " = x" +
+                    std::to_string(instr.rs1) + " << " +
+                    std::to_string(registers[instr.rs2].value & REGISTER_MASK));
             } else if (instr.funct7 == Funct7::MULH) {
                 int64_t result_mul = (int64_t)registers[instr.rs1].value *
                                      (int64_t)registers[instr.rs2].value;
@@ -663,8 +736,10 @@ uint32_t CPU::execute_r_type(const RType &instr) {
             } else if (instr.funct7 == Funct7::DIV) {
                 if (registers[instr.rs2].value == 0) {
                     LOG_ERROR("Division by zero!");
-                    set_status_flag(StatusFlags::STATUS_DIV_ZERO);
-                    throw std::runtime_error("Division by zero!");
+                    set_status_flag(StatusFlags::DIV_ZERO);
+                    throw std::runtime_error(
+                        "Division by zero in instruction at PC: 0x" +
+                        Memory::to_hex_string(pc));
                 }
                 result = (int32_t)registers[instr.rs1].value /
                          (int32_t)registers[instr.rs2].value;
@@ -677,16 +752,18 @@ uint32_t CPU::execute_r_type(const RType &instr) {
             // case RTypeFunct3::SRA:
             if (instr.funct7 == Funct7::SRL) {  // SRL
                 result = registers[instr.rs1].value >>
-                         (registers[instr.rs2].value & 0x1F);
-                LOG_DEBUG("Executed SRL: x" + std::to_string(instr.rd) +
-                          " = x" + std::to_string(instr.rs1) + " >> " +
-                          std::to_string(registers[instr.rs2].value & 0x1F));
+                         (registers[instr.rs2].value & REGISTER_MASK);
+                LOG_DEBUG(
+                    "Executed SRL: x" + std::to_string(instr.rd) + " = x" +
+                    std::to_string(instr.rs1) + " >> " +
+                    std::to_string(registers[instr.rs2].value & REGISTER_MASK));
             } else if (instr.funct7 == Funct7::SRA) {  // SRA
                 result = (int32_t)registers[instr.rs1].value >>
-                         (registers[instr.rs2].value & 0x1F);
-                LOG_DEBUG("Executed SRA: x" + std::to_string(instr.rd) +
-                          " = (int32_t)x" + std::to_string(instr.rs1) + " >> " +
-                          std::to_string(registers[instr.rs2].value & 0x1F));
+                         (registers[instr.rs2].value & REGISTER_MASK);
+                LOG_DEBUG(
+                    "Executed SRA: x" + std::to_string(instr.rd) +
+                    " = (int32_t)x" + std::to_string(instr.rs1) + " >> " +
+                    std::to_string(registers[instr.rs2].value & REGISTER_MASK));
             }
             break;
         case RTypeFunct3::OR:
@@ -823,53 +900,53 @@ void CPU::set_sp(uint32_t address) {
  * @param pipeline The pipeline state.
  * @return true if a stall is needed, false otherwise.
  */
-bool CPU::detect_hazard() {
-    if (pipeline.decode.valid) {
-        auto &decoded = pipeline.decode.instruction;
-        uint32_t rs1 = 0, rs2 = 0;
+// bool CPU::detect_hazard() {
+//     if (pipeline.decode.valid) {
+//         auto &decoded = pipeline.decode.instruction;
+//         uint32_t rs1 = 0, rs2 = 0;
 
-        if (std::holds_alternative<RType>(decoded)) {
-            auto r_type = std::get<RType>(decoded);
-            rs1 = r_type.rs1;
-            rs2 = r_type.rs2;
-        } else if (std::holds_alternative<IType>(decoded)) {
-            auto i_type = std::get<IType>(decoded);
-            rs1 = i_type.rs1;
-        }
+//         if (std::holds_alternative<RType>(decoded)) {
+//             auto r_type = std::get<RType>(decoded);
+//             rs1 = r_type.rs1;
+//             rs2 = r_type.rs2;
+//         } else if (std::holds_alternative<IType>(decoded)) {
+//             auto i_type = std::get<IType>(decoded);
+//             rs1 = i_type.rs1;
+//         }
 
-        if (pipeline.execute.valid) {
-            auto &exec_instr = pipeline.execute.instruction;
-            if (std::holds_alternative<RType>(exec_instr)) {
-                auto exec_r_type = std::get<RType>(exec_instr);
-                if (exec_r_type.rd == rs1 || exec_r_type.rd == rs2) {
-                    return true;  // Hazard detected
-                }
-            } else if (std::holds_alternative<IType>(exec_instr)) {
-                auto exec_i_type = std::get<IType>(exec_instr);
-                if (exec_i_type.rd == rs1) {
-                    return true;  // Hazard detected
-                }
-            }
-        }
+//         if (pipeline.execute.valid) {
+//             auto &exec_instr = pipeline.execute.instruction;
+//             if (std::holds_alternative<RType>(exec_instr)) {
+//                 auto exec_r_type = std::get<RType>(exec_instr);
+//                 if (exec_r_type.rd == rs1 || exec_r_type.rd == rs2) {
+//                     return true;  // Hazard detected
+//                 }
+//             } else if (std::holds_alternative<IType>(exec_instr)) {
+//                 auto exec_i_type = std::get<IType>(exec_instr);
+//                 if (exec_i_type.rd == rs1) {
+//                     return true;  // Hazard detected
+//                 }
+//             }
+//         }
 
-        if (pipeline.memory.valid) {
-            auto &mem_instr = pipeline.memory.instruction;
-            if (std::holds_alternative<RType>(mem_instr)) {
-                auto mem_r_type = std::get<RType>(mem_instr);
-                if (mem_r_type.rd == rs1 || mem_r_type.rd == rs2) {
-                    return true;  // Hazard detected
-                }
-            } else if (std::holds_alternative<IType>(mem_instr)) {
-                auto mem_i_type = std::get<IType>(mem_instr);
-                if (mem_i_type.rd == rs1) {
-                    return true;  // Hazard detected
-                }
-            }
-        }
-    }
+//         if (pipeline.memory.valid) {
+//             auto &mem_instr = pipeline.memory.instruction;
+//             if (std::holds_alternative<RType>(mem_instr)) {
+//                 auto mem_r_type = std::get<RType>(mem_instr);
+//                 if (mem_r_type.rd == rs1 || mem_r_type.rd == rs2) {
+//                     return true;  // Hazard detected
+//                 }
+//             } else if (std::holds_alternative<IType>(mem_instr)) {
+//                 auto mem_i_type = std::get<IType>(mem_instr);
+//                 if (mem_i_type.rd == rs1) {
+//                     return true;  // Hazard detected
+//                 }
+//             }
+//         }
+//     }
 
-    return false;  // No hazard detected
-}
+//     return false;  // No hazard detected
+// }
 
 /**
  * @brief Print the CPU registers.
@@ -918,16 +995,17 @@ void CPU::set_status(uint32_t status) {
 }
 
 void CPU::set_status_flag(StatusFlags flag) {
-    uint32_t mask = static_cast<uint32_t>(flag);
-    status |= mask;
-    LOG_DEBUG("Status flag set: 0x" + Memory::to_hex_string(mask));
+    status |= static_cast<uint32_t>(flag);
+    LOG_DEBUG("Status flag set: 0x" +
+              Memory::to_hex_string(static_cast<uint32_t>(flag)));
 }
 
-void CPU::clear_status_flag(uint32_t flag) {
-    status &= ~flag;
-    LOG_DEBUG("Status flag cleared: 0x" + Memory::to_hex_string(flag));
+void CPU::clear_status_flag(StatusFlags flag) {
+    status &= ~static_cast<uint32_t>(flag);
+    LOG_DEBUG("Status flag cleared: 0x" +
+              Memory::to_hex_string(static_cast<uint32_t>(flag)));
 }
 
 bool CPU::is_halted() const {
-    return status & static_cast<uint32_t>(StatusFlags::STATUS_HALT);
+    return status & static_cast<uint32_t>(StatusFlags::HALT);
 }
