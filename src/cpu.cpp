@@ -41,9 +41,23 @@ constexpr uint32_t SIGN_EXTEND_MASK = 0xFFFFF000;
 //     }
 // }
 
+
+/**
+ * @class CPU
+ * @brief Represents a RISC-V CPU emulator.
+ *
+ * The CPU class emulates the behavior of a RISC-V processor, including
+ * instruction fetching, decoding, execution, memory access, and write-back.
+ * It supports a pipeline architecture and handles various instruction types
+ * such as R-Type, I-Type, S-Type, B-Type, J-Type, and U-Type.
+ */
+
 // Constructor
 /**
  * @brief Construct a new CPU object.
+ *
+ * Initializes the CPU with a reference to the memory object and sets up
+ * the program counter (PC) and registers.
  *
  * @param memory Reference to the memory object.
  */
@@ -57,7 +71,8 @@ CPU::CPU(Memory &memory) : memory(memory), pc(0) {
 /**
  * @brief Fetch the next instruction from memory.
  *
- * @param pipeline The pipeline state.
+ * Fetches the instruction at the current program counter (PC) and updates
+ * the pipeline fetch stage. The PC is incremented after fetching.
  */
 void CPU::fetch() {
     if (!pipeline.stall && !pipeline.fetch.valid) {
@@ -76,7 +91,9 @@ void CPU::fetch() {
 /**
  * @brief Decode the fetched instruction.
  *
- * @param pipeline The pipeline state.
+ * Decodes the instruction fetched in the pipeline fetch stage and determines
+ * its type (e.g., R-Type, I-Type, etc.). The decoded instruction is passed
+ * to the pipeline decode stage.
  */
 void CPU::decode() {
     if (!pipeline.stall && pipeline.fetch.valid) {
@@ -113,18 +130,6 @@ void CPU::decode() {
                           ", rd=" + std::to_string(r_type.rd) +
                           ", rs1=" + std::to_string(r_type.rs1) +
                           ", rs2=" + std::to_string(r_type.rs2));
-                // Hazard detection
-                // if (pipeline.execute.valid) {
-                //     auto &exec_instr = pipeline.execute.instruction;
-                //     if (std::holds_alternative<RType>(exec_instr)) {
-                //         auto exec_r_type = std::get<RType>(exec_instr);
-                //         if (exec_r_type.rd == r_type.rs1 ||
-                //             exec_r_type.rd == r_type.rs2) {
-                //             pipeline.stall = true;
-                //             return;  // Stall the pipeline
-                //         }
-                //     }
-                // }
                 pipeline.decode.instruction = r_type;
                 break;
             }
@@ -143,19 +148,6 @@ void CPU::decode() {
                           ", rd=" + std::to_string(i_type.rd) +
                           ", rs1=" + std::to_string(i_type.rs1) +
                           ", imm=" + std::to_string(i_type.imm));
-
-                // Hazard detection
-                // if (pipeline.execute.valid) {
-                //     auto &exec_instr = pipeline.execute.instruction;
-                //     if (std::holds_alternative<RType>(exec_instr)) {
-                //         auto exec_r_type = std::get<RType>(exec_instr);
-                //         if (exec_r_type.rd == i_type.rs1) {
-                //             pipeline.stall = true;
-                //             return;  // Stall the pipeline
-                //         }
-                //     }
-                // }
-
                 pipeline.decode.instruction = i_type;
                 break;
             }
@@ -284,7 +276,8 @@ void CPU::decode() {
 /**
  * @brief Execute the decoded instruction.
  *
- * @param pipeline The pipeline state.
+ * Executes the instruction in the pipeline decode stage. Handles ALU
+ * operations, branching, and other instruction-specific logic.
  */
 void CPU::execute() {
     if (!pipeline.stall && pipeline.decode.valid) {
@@ -342,7 +335,7 @@ void CPU::execute() {
                     auto mem_r_type =
                         std::get<RType>(pipeline.memory.instruction);
                     if (mem_r_type.rd == i_type.rs1 && mem_r_type.rd != 0) {
-                        registers[i_type.rs1].value = pipeline.memory.result;
+                        registers[i_type.rs1].value = pipeline.write_back.result;
                     }
                 } else if (pipeline.write_back.valid &&
                            pipeline.write_back.rd == i_type.rs1 &&
@@ -367,6 +360,32 @@ void CPU::execute() {
                        pipeline.execute.instruction)) {
             auto s_type = std::get<SType>(pipeline.execute.instruction);
 
+            // Forwarding logic for rs1
+            if (pipeline.memory.valid &&
+                std::holds_alternative<RType>(pipeline.memory.instruction)) {
+                auto mem_r_type = std::get<RType>(pipeline.memory.instruction);
+                if (mem_r_type.rd == s_type.rs1 && mem_r_type.rd != 0) {
+                    registers[s_type.rs1].value = pipeline.memory.result;
+                }
+            } else if (pipeline.write_back.valid &&
+                       pipeline.write_back.rd == s_type.rs1 &&
+                       pipeline.write_back.rd != 0) {
+                registers[s_type.rs1].value = pipeline.write_back.result;
+            }
+
+            // Forwarding logic for rs2
+            if (pipeline.memory.valid &&
+                std::holds_alternative<RType>(pipeline.memory.instruction)) {
+                auto mem_r_type = std::get<RType>(pipeline.memory.instruction);
+                if (mem_r_type.rd == s_type.rs2 && mem_r_type.rd != 0) {
+                    registers[s_type.rs2].value = pipeline.memory.result;
+                }
+            } else if (pipeline.write_back.valid &&
+                       pipeline.write_back.rd == s_type.rs2 &&
+                       pipeline.write_back.rd != 0) {
+                registers[s_type.rs2].value = pipeline.write_back.result;
+            }
+
             // Sign-extend the immediate value
             int32_t sign_extended_imm = static_cast<int32_t>(s_type.imm);
 
@@ -376,6 +395,33 @@ void CPU::execute() {
         } else if (std::holds_alternative<BType>(
                        pipeline.execute.instruction)) {
             auto b_type = std::get<BType>(pipeline.execute.instruction);
+
+            // Forwarding logic for rs1
+            if (pipeline.memory.valid &&
+                std::holds_alternative<RType>(pipeline.memory.instruction)) {
+                auto mem_r_type = std::get<RType>(pipeline.memory.instruction);
+                if (mem_r_type.rd == b_type.rs1 && mem_r_type.rd != 0) {
+                    registers[b_type.rs1].value = pipeline.memory.result;
+                }
+            } else if (pipeline.write_back.valid &&
+                       pipeline.write_back.rd == b_type.rs1 &&
+                       pipeline.write_back.rd != 0) {
+                registers[b_type.rs1].value = pipeline.write_back.result;
+            }
+
+            // Forwarding logic for rs2
+            if (pipeline.memory.valid &&
+                std::holds_alternative<RType>(pipeline.memory.instruction)) {
+                auto mem_r_type = std::get<RType>(pipeline.memory.instruction);
+                if (mem_r_type.rd == b_type.rs2 && mem_r_type.rd != 0) {
+                    registers[b_type.rs2].value = pipeline.memory.result;
+                }
+            } else if (pipeline.write_back.valid &&
+                       pipeline.write_back.rd == b_type.rs2 &&
+                       pipeline.write_back.rd != 0) {
+                registers[b_type.rs2].value = pipeline.write_back.result;
+            }
+
             execute_b_type(b_type);
         } else if (std::holds_alternative<UType>(
                        pipeline.execute.instruction)) {
@@ -396,7 +442,8 @@ void CPU::execute() {
 /**
  * @brief Execute the memory stage.
  *
- * @param pipeline The pipeline state.
+ * Handles memory operations such as loading and storing data. Updates the
+ * pipeline memory stage with the results of memory operations.
  */
 void CPU::mem() {
     if (!pipeline.stall && pipeline.execute.valid) {
@@ -471,7 +518,8 @@ void CPU::mem() {
 /**
  * @brief Execute the write-back stage.
  *
- * @param pipeline The pipeline state.
+ * Writes the results of executed instructions back to the appropriate
+ * registers. Updates the pipeline write-back stage.
  */
 void CPU::write_back() {
     if (pipeline.memory.valid) {
@@ -521,8 +569,10 @@ void CPU::write_back() {
 /**
  * @brief Execute an I-Type instruction.
  *
- * @param pipeline The pipeline state.
+ * Performs ALU operations for I-Type instructions such as ADDI, SLTI, etc.
+ *
  * @param instr The decoded I-Type instruction.
+ * @return uint32_t The result of the ALU operation.
  */
 uint32_t CPU::execute_i_type(const IType &instr) {
     uint32_t result = 0;
@@ -561,7 +611,6 @@ uint32_t CPU::execute_i_type(const IType &instr) {
                       std::to_string(instr.imm));
             break;
         case ITypeFunct3::SRLI:
-            // case ITypeFunct3::SRAI:
             if ((instr.imm & 0x40000000) == 0) {
                 result =
                     registers[instr.rs1].value >> (instr.imm & REGISTER_MASK);
@@ -600,6 +649,8 @@ uint32_t CPU::execute_i_type(const IType &instr) {
 /**
  * @brief Execute a store instruction.
  *
+ * Handles memory store operations for S-Type instructions.
+ *
  * @param instr The decoded S-Type instruction.
  */
 void CPU::execute_s_type(const SType &instr) {
@@ -637,7 +688,10 @@ void CPU::execute_s_type(const SType &instr) {
 /**
  * @brief Execute an R-Type instruction.
  *
+ * Performs ALU operations for R-Type instructions such as ADD, SUB, etc.
+ *
  * @param instr The decoded R-Type instruction.
+ * @return uint32_t The result of the ALU operation.
  */
 uint32_t CPU::execute_r_type(const RType &instr) {
     LOG_DEBUG("Executing R-Type instruction");
@@ -645,8 +699,6 @@ uint32_t CPU::execute_r_type(const RType &instr) {
     uint32_t result = 0;
     switch (instr.funct3) {
         case RTypeFunct3::ADD:
-            // case RTypeFunct3::SUB:
-            // case RTypeFunct3::MUL:
             if (instr.funct7 == Funct7::ADD) {  // ADD
                 result =
                     registers[instr.rs1].value + registers[instr.rs2].value;
@@ -668,7 +720,6 @@ uint32_t CPU::execute_r_type(const RType &instr) {
             }
             break;
         case RTypeFunct3::SLL:
-            // case RTypeFunct3::MULH:
             if (instr.funct7 == Funct7::SLL) {
                 result = registers[instr.rs1].value
                          << (registers[instr.rs2].value & REGISTER_MASK);
@@ -687,7 +738,6 @@ uint32_t CPU::execute_r_type(const RType &instr) {
             }
             break;
         case RTypeFunct3::SLT:
-            // case RTypeFunct3::MULHSU:
             if (instr.funct7 == Funct7::SLT) {
                 result = (int32_t)registers[instr.rs1].value <
                                  (int32_t)registers[instr.rs2].value
@@ -707,7 +757,6 @@ uint32_t CPU::execute_r_type(const RType &instr) {
             }
             break;
         case RTypeFunct3::SLTU:
-            // case RTypeFunct3::MULHU:
             if (instr.funct7 == Funct7::SLTU) {
                 result = registers[instr.rs1].value < registers[instr.rs2].value
                              ? 1
@@ -726,7 +775,6 @@ uint32_t CPU::execute_r_type(const RType &instr) {
             }
             break;
         case RTypeFunct3::XOR:
-            // case RTypeFunct3::DIV:
             if (instr.funct7 == Funct7::XOR) {
                 result =
                     registers[instr.rs1].value ^ registers[instr.rs2].value;
@@ -749,7 +797,6 @@ uint32_t CPU::execute_r_type(const RType &instr) {
             }
             break;
         case RTypeFunct3::SRL:
-            // case RTypeFunct3::SRA:
             if (instr.funct7 == Funct7::SRL) {  // SRL
                 result = registers[instr.rs1].value >>
                          (registers[instr.rs2].value & REGISTER_MASK);
@@ -767,7 +814,6 @@ uint32_t CPU::execute_r_type(const RType &instr) {
             }
             break;
         case RTypeFunct3::OR:
-            // case RTypeFunct3::REM:
             if (instr.funct7 == Funct7::OR) {
                 result =
                     registers[instr.rs1].value | registers[instr.rs2].value;
@@ -787,7 +833,6 @@ uint32_t CPU::execute_r_type(const RType &instr) {
             }
             break;
         case RTypeFunct3::AND:
-            // case RTypeFunct3::REMU:
             if (instr.funct7 == Funct7::AND) {
                 result =
                     registers[instr.rs1].value & registers[instr.rs2].value;
@@ -815,6 +860,8 @@ uint32_t CPU::execute_r_type(const RType &instr) {
 
 /**
  * @brief Execute a B-Type instruction.
+ *
+ * Handles branching logic for B-Type instructions such as BEQ and BNE.
  *
  * @param instr The decoded B-Type instruction.
  */
@@ -849,6 +896,8 @@ void CPU::execute_b_type(const BType &instr) {
 /**
  * @brief Execute a J-Type instruction.
  *
+ * Handles jump instructions such as JAL.
+ *
  * @param instr The decoded J-Type instruction.
  */
 void CPU::execute_j_type(const JType &instr) {
@@ -861,6 +910,8 @@ void CPU::execute_j_type(const JType &instr) {
 
 /**
  * @brief Execute a U-Type instruction.
+ *
+ * Handles upper immediate instructions such as LUI.
  *
  * @param instr The decoded U-Type instruction.
  * @return uint32_t The result of the ALU operation.
@@ -876,6 +927,8 @@ uint32_t CPU::execute_u_type(const UType &instr) {
 /**
  * @brief Set the program counter.
  *
+ * Updates the program counter (PC) to the specified address.
+ *
  * @param address The address to set the program counter to.
  */
 void CPU::set_pc(uint32_t address) {
@@ -886,6 +939,8 @@ void CPU::set_pc(uint32_t address) {
 /**
  * @brief Set the stack pointer.
  *
+ * Updates the stack pointer (SP) register to the specified address.
+ *
  * @param address The address to set the stack pointer to.
  */
 void CPU::set_sp(uint32_t address) {
@@ -895,61 +950,9 @@ void CPU::set_sp(uint32_t address) {
 }
 
 /**
- * @brief Check for data hazards and set stall signals.
- *
- * @param pipeline The pipeline state.
- * @return true if a stall is needed, false otherwise.
- */
-// bool CPU::detect_hazard() {
-//     if (pipeline.decode.valid) {
-//         auto &decoded = pipeline.decode.instruction;
-//         uint32_t rs1 = 0, rs2 = 0;
-
-//         if (std::holds_alternative<RType>(decoded)) {
-//             auto r_type = std::get<RType>(decoded);
-//             rs1 = r_type.rs1;
-//             rs2 = r_type.rs2;
-//         } else if (std::holds_alternative<IType>(decoded)) {
-//             auto i_type = std::get<IType>(decoded);
-//             rs1 = i_type.rs1;
-//         }
-
-//         if (pipeline.execute.valid) {
-//             auto &exec_instr = pipeline.execute.instruction;
-//             if (std::holds_alternative<RType>(exec_instr)) {
-//                 auto exec_r_type = std::get<RType>(exec_instr);
-//                 if (exec_r_type.rd == rs1 || exec_r_type.rd == rs2) {
-//                     return true;  // Hazard detected
-//                 }
-//             } else if (std::holds_alternative<IType>(exec_instr)) {
-//                 auto exec_i_type = std::get<IType>(exec_instr);
-//                 if (exec_i_type.rd == rs1) {
-//                     return true;  // Hazard detected
-//                 }
-//             }
-//         }
-
-//         if (pipeline.memory.valid) {
-//             auto &mem_instr = pipeline.memory.instruction;
-//             if (std::holds_alternative<RType>(mem_instr)) {
-//                 auto mem_r_type = std::get<RType>(mem_instr);
-//                 if (mem_r_type.rd == rs1 || mem_r_type.rd == rs2) {
-//                     return true;  // Hazard detected
-//                 }
-//             } else if (std::holds_alternative<IType>(mem_instr)) {
-//                 auto mem_i_type = std::get<IType>(mem_instr);
-//                 if (mem_i_type.rd == rs1) {
-//                     return true;  // Hazard detected
-//                 }
-//             }
-//         }
-//     }
-
-//     return false;  // No hazard detected
-// }
-
-/**
  * @brief Print the CPU registers.
+ *
+ * Outputs the current values of all CPU registers and the program counter (PC).
  */
 void CPU::print_registers() const {
     std::cout << "PC: 0x" << Memory::to_hex_string(pc) << std::endl;
@@ -964,27 +967,64 @@ void CPU::print_registers() const {
 /**
  * @brief Get the program counter.
  *
- * @return uint32_t The program counter.
+ * @return uint32_t The current value of the program counter (PC).
  */
 uint32_t CPU::get_pc() const { return pc; }
 
 /**
  * @brief Get the text size.
  *
- * @return uint32_t The text size.
+ * Retrieves the size of the text segment from memory.
+ *
+ * @return uint32_t The size of the text segment.
  */
 uint32_t CPU::get_text_size() const {
     return memory.get_memory_layout().text_size;
 }
 
+/**
+ * @brief Check if the fetch stage can proceed.
+ *
+ * Determines if the fetch stage is ready to fetch the next instruction.
+ *
+ * @return true if the fetch stage can proceed, false otherwise.
+ */
 bool CPU::can_fetch() { return !pipeline.fetch.valid; }
 
+/**
+ * @brief Check if the decode stage can proceed.
+ *
+ * Determines if the decode stage is ready to decode the fetched instruction.
+ *
+ * @return true if the decode stage can proceed, false otherwise.
+ */
 bool CPU::can_decode() { return pipeline.fetch.valid; }
 
+/**
+ * @brief Check if the execute stage can proceed.
+ *
+ * Determines if the execute stage is ready to execute the decoded instruction.
+ *
+ * @return true if the execute stage can proceed, false otherwise.
+ */
 bool CPU::can_execute() { return pipeline.decode.valid; }
 
+/**
+ * @brief Check if the memory stage can proceed.
+ *
+ * Determines if the memory stage is ready to perform memory operations.
+ *
+ * @return true if the memory stage can proceed, false otherwise.
+ */
 bool CPU::can_mem() { return pipeline.execute.valid; }
 
+/**
+ * @brief Check if the write-back stage can proceed.
+ *
+ * Determines if the write-back stage is ready to write results back to registers.
+ *
+ * @return true if the write-back stage can proceed, false otherwise.
+ */
 bool CPU::can_write_back() { return pipeline.memory.valid; }
 
 uint32_t CPU::get_status() const { return status; }
@@ -1008,4 +1048,36 @@ void CPU::clear_status_flag(StatusFlags flag) {
 
 bool CPU::is_halted() const {
     return status & static_cast<uint32_t>(StatusFlags::HALT);
+}
+
+/**
+ * @brief Forward a register value.
+ *
+ * Implements forwarding logic to resolve data hazards in the pipeline.
+ *
+ * @param rs The source register index.
+ * @return uint32_t The forwarded value.
+ */
+uint32_t CPU::forward_value(uint8_t rs) {
+    if (pipeline.memory.valid &&
+        std::visit([&](auto&& instr) -> bool {
+            using T = std::decay_t<decltype(instr)>;
+            if constexpr (std::is_same_v<T, RType> || std::is_same_v<T, IType> || std::is_same_v<T, UType>) {
+                return instr.rd == rs;
+            }
+            return false;
+        }, pipeline.memory.instruction) &&
+        std::visit([&](auto&& instr) {
+            using T = std::decay_t<decltype(instr)>;
+            if constexpr (std::is_same_v<T, RType> || std::is_same_v<T, IType> || std::is_same_v<T, UType>) {
+                return instr.rd != 0;
+            }
+            return false;
+        }, pipeline.memory.instruction)) {
+        return pipeline.memory.result;
+    } else if (pipeline.write_back.valid && pipeline.write_back.rd == rs &&
+               pipeline.write_back.rd != 0) {
+        return pipeline.write_back.result;
+    }
+    return registers[rs].value;
 }
