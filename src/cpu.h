@@ -517,6 +517,8 @@ class CPU {
      */
     uint32_t forward_value(uint8_t rs);
 
+    void detect_hazards();
+
    private:
     Memory &memory;                      ///< Reference to the memory object.
     Pipeline pipeline;                   ///< The pipeline state.

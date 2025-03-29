@@ -41,7 +41,6 @@ constexpr uint32_t SIGN_EXTEND_MASK = 0xFFFFF000;
 //     }
 // }
 
-
 /**
  * @class CPU
  * @brief Represents a RISC-V CPU emulator.
@@ -75,6 +74,7 @@ CPU::CPU(Memory &memory) : memory(memory), pc(0) {
  * the pipeline fetch stage. The PC is incremented after fetching.
  */
 void CPU::fetch() {
+    detect_hazards();
     if (!pipeline.stall && !pipeline.fetch.valid) {
         pipeline.fetch.instruction = memory.load_word(pc);
         pipeline.fetch.pc = pc;
@@ -96,6 +96,7 @@ void CPU::fetch() {
  * to the pipeline decode stage.
  */
 void CPU::decode() {
+    detect_hazards();
     if (!pipeline.stall && pipeline.fetch.valid) {
         uint32_t instruction = pipeline.fetch.instruction;
         if (instruction == 0) {
@@ -280,6 +281,7 @@ void CPU::decode() {
  * operations, branching, and other instruction-specific logic.
  */
 void CPU::execute() {
+    detect_hazards();
     if (!pipeline.stall && pipeline.decode.valid) {
         pipeline.decode.valid = false;
 
@@ -335,7 +337,8 @@ void CPU::execute() {
                     auto mem_r_type =
                         std::get<RType>(pipeline.memory.instruction);
                     if (mem_r_type.rd == i_type.rs1 && mem_r_type.rd != 0) {
-                        registers[i_type.rs1].value = pipeline.write_back.result;
+                        registers[i_type.rs1].value =
+                            pipeline.write_back.result;
                     }
                 } else if (pipeline.write_back.valid &&
                            pipeline.write_back.rd == i_type.rs1 &&
@@ -446,6 +449,7 @@ void CPU::execute() {
  * pipeline memory stage with the results of memory operations.
  */
 void CPU::mem() {
+    detect_hazards();
     if (!pipeline.stall && pipeline.execute.valid) {
         pipeline.execute.valid = false;
 
@@ -522,6 +526,7 @@ void CPU::mem() {
  * registers. Updates the pipeline write-back stage.
  */
 void CPU::write_back() {
+    detect_hazards();
     if (pipeline.memory.valid) {
         pipeline.memory.valid = false;
 
@@ -1021,7 +1026,8 @@ bool CPU::can_mem() { return pipeline.execute.valid; }
 /**
  * @brief Check if the write-back stage can proceed.
  *
- * Determines if the write-back stage is ready to write results back to registers.
+ * Determines if the write-back stage is ready to write results back to
+ * registers.
  *
  * @return true if the write-back stage can proceed, false otherwise.
  */
@@ -1060,24 +1066,108 @@ bool CPU::is_halted() const {
  */
 uint32_t CPU::forward_value(uint8_t rs) {
     if (pipeline.memory.valid &&
-        std::visit([&](auto&& instr) -> bool {
-            using T = std::decay_t<decltype(instr)>;
-            if constexpr (std::is_same_v<T, RType> || std::is_same_v<T, IType> || std::is_same_v<T, UType>) {
-                return instr.rd == rs;
-            }
-            return false;
-        }, pipeline.memory.instruction) &&
-        std::visit([&](auto&& instr) {
-            using T = std::decay_t<decltype(instr)>;
-            if constexpr (std::is_same_v<T, RType> || std::is_same_v<T, IType> || std::is_same_v<T, UType>) {
-                return instr.rd != 0;
-            }
-            return false;
-        }, pipeline.memory.instruction)) {
+        std::visit(
+            [&](auto &&instr) -> bool {
+                using T = std::decay_t<decltype(instr)>;
+                if constexpr (std::is_same_v<T, RType> ||
+                              std::is_same_v<T, IType> ||
+                              std::is_same_v<T, UType>) {
+                    return instr.rd == rs;
+                }
+                return false;
+            },
+            pipeline.memory.instruction) &&
+        std::visit(
+            [&](auto &&instr) {
+                using T = std::decay_t<decltype(instr)>;
+                if constexpr (std::is_same_v<T, RType> ||
+                              std::is_same_v<T, IType> ||
+                              std::is_same_v<T, UType>) {
+                    return instr.rd != 0;
+                }
+                return false;
+            },
+            pipeline.memory.instruction)) {
         return pipeline.memory.result;
     } else if (pipeline.write_back.valid && pipeline.write_back.rd == rs &&
                pipeline.write_back.rd != 0) {
         return pipeline.write_back.result;
     }
     return registers[rs].value;
+}
+
+/**
+ * @brief Detect and handle pipeline hazards.
+ *
+ * This function detects data, structural, and control hazards and takes
+ * appropriate actions, such as stalling the pipeline or forwarding values.
+ */
+void CPU::detect_hazards() {
+    // Reset stall signal
+    pipeline.stall = false;
+
+    // Data Hazard Detection
+    if (pipeline.decode.valid) {
+        auto check_data_hazard = [&](uint8_t rs) -> bool {
+            if (pipeline.execute.valid) {
+                if (std::holds_alternative<RType>(
+                        pipeline.execute.instruction)) {
+                    auto r_type = std::get<RType>(pipeline.execute.instruction);
+                    if (r_type.rd == rs && r_type.rd != 0) {
+                        return true;
+                    }
+                } else if (std::holds_alternative<IType>(
+                               pipeline.execute.instruction)) {
+                    auto i_type = std::get<IType>(pipeline.execute.instruction);
+                    if (i_type.rd == rs && i_type.rd != 0) {
+                        return true;
+                    }
+                }
+            }
+            if (pipeline.memory.valid) {
+                if (std::holds_alternative<RType>(
+                        pipeline.memory.instruction)) {
+                    auto r_type = std::get<RType>(pipeline.memory.instruction);
+                    if (r_type.rd == rs && r_type.rd != 0) {
+                        return true;
+                    }
+                } else if (std::holds_alternative<IType>(
+                               pipeline.memory.instruction)) {
+                    auto i_type = std::get<IType>(pipeline.memory.instruction);
+                    if (i_type.rd == rs && i_type.rd != 0) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        };
+
+        if (std::holds_alternative<RType>(pipeline.decode.instruction)) {
+            auto r_type = std::get<RType>(pipeline.decode.instruction);
+            if (check_data_hazard(r_type.rs1) ||
+                check_data_hazard(r_type.rs2)) {
+                pipeline.stall = true;
+            }
+        } else if (std::holds_alternative<IType>(pipeline.decode.instruction)) {
+            auto i_type = std::get<IType>(pipeline.decode.instruction);
+            if (check_data_hazard(i_type.rs1)) {
+                pipeline.stall = true;
+            }
+        }
+    }
+
+    // Structural Hazard Detection
+    if (pipeline.memory.valid && pipeline.execute.valid) {
+        // Example: Memory stage and Execute stage both accessing memory
+        pipeline.stall = true;
+    }
+
+    // Control Hazard Detection
+    if (pipeline.decode.valid) {
+        if (std::holds_alternative<BType>(pipeline.decode.instruction) ||
+            std::holds_alternative<JType>(pipeline.decode.instruction)) {
+            // Control hazard detected, stall pipeline
+            pipeline.stall = true;
+        }
+    }
 }
