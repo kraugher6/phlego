@@ -12,6 +12,7 @@ public:
     CPURunner(CPU &cpu);
     void run();
     void stop();
+    // ~CPURunner(); // Add destructor to join threads
 
 private:
     CPU &cpu;

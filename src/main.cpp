@@ -1,4 +1,3 @@
-#include <iostream>
 #include "cpu.h"
 #include "cpu_runner.h"
 #include "memory.h"

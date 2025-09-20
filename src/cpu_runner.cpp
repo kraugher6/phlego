@@ -28,12 +28,16 @@ void CPURunner::run() {
 
     LOG_INFO("Started CPU threads");
 
+    // Avvia solo la fetch all'inizio
+    fetch_cv.notify_one();
+
     while (is_running) {
         if (cpu.is_halted()) {
             is_running = false;
             stop();
             LOG_INFO("Encountered halt flag. Terminating execution.");
         }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1)); // Evita busy loop
     }
 
     LOG_INFO("CPU state after execution:");
@@ -64,12 +68,11 @@ void CPURunner::stop() {
 void CPURunner::fetch_thread_function() {
     std::unique_lock<std::mutex> lock(fetch_mutex);
     while (is_running) {
-        LOG_DEBUG("Fetch thread waiting");
-        fetch_cv.wait(lock, [this] { return cpu.can_fetch() || !is_running; });
+        fetch_cv.wait(lock, [this] { return !is_running || cpu.can_fetch(); });
         if (!is_running) break;
         LOG_DEBUG("Fetch thread running");
         cpu.fetch();
-        decode_cv.notify_one();
+        decode_cv.notify_one(); // Sblocca decode
     }
     LOG_INFO("Fetch thread exiting");
 }
@@ -77,13 +80,11 @@ void CPURunner::fetch_thread_function() {
 void CPURunner::decode_thread_function() {
     std::unique_lock<std::mutex> lock(decode_mutex);
     while (is_running) {
-        LOG_DEBUG("Decode thread waiting");
-        decode_cv.wait(lock, [this] { return cpu.can_decode() || !is_running; });
+        decode_cv.wait(lock, [this] { return !is_running || cpu.can_decode(); });
         if (!is_running) break;
         LOG_DEBUG("Decode thread running");
         cpu.decode();
-        fetch_cv.notify_one();
-        execute_cv.notify_one();
+        execute_cv.notify_one(); // Sblocca execute
     }
     LOG_INFO("Decode thread exiting");
 }
@@ -91,35 +92,35 @@ void CPURunner::decode_thread_function() {
 void CPURunner::execute_thread_function() {
     std::unique_lock<std::mutex> lock(execute_mutex);
     while (is_running) {
-        LOG_DEBUG("Execute thread waiting");
-        execute_cv.wait(lock, [this] { return cpu.can_execute() || !is_running; });
+        execute_cv.wait(lock, [this] { return !is_running || cpu.can_execute(); });
         if (!is_running) break;
         LOG_DEBUG("Execute thread running");
         cpu.execute();
-        mem_cv.notify_one();
+        mem_cv.notify_one(); // Sblocca mem
     }
+    LOG_INFO("Execute thread exiting");
 }
 
 void CPURunner::mem_thread_function() {
     std::unique_lock<std::mutex> lock(mem_mutex);
     while (is_running) {
-        LOG_DEBUG("Mem thread waiting");
-        mem_cv.wait(lock, [this] { return cpu.can_mem() || !is_running; });
+        mem_cv.wait(lock, [this] { return !is_running || cpu.can_mem(); });
         if (!is_running) break;
         LOG_DEBUG("Mem thread running");
         cpu.mem();
-        write_back_cv.notify_one();
+        write_back_cv.notify_one(); // Sblocca write_back
     }
+    LOG_INFO("Mem thread exiting");
 }
 
 void CPURunner::write_back_thread_function() {
     std::unique_lock<std::mutex> lock(write_back_mutex);
     while (is_running) {
-        LOG_DEBUG("Write back thread waiting");
-        write_back_cv.wait(lock,
-                           [this] { return cpu.can_write_back() || !is_running; });
+        write_back_cv.wait(lock, [this] { return !is_running || cpu.can_write_back(); });
         if (!is_running) break;
         LOG_DEBUG("Write back thread running");
         cpu.write_back();
+        fetch_cv.notify_one(); // Sblocca fetch per il prossimo ciclo
     }
+    LOG_INFO("Write back thread exiting");
 }
