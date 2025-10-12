@@ -109,8 +109,8 @@ void CPU::decode() {
                 break;
             }
             case Opcode::I_TYPE_LOAD: {
-                IType i_type = {
-                    static_cast<ITypeFunct3>((instruction >> 12) &
+                ITypeLoad i_type = {
+                    static_cast<ITypeLoadFunct3>((instruction >> 12) &
                                              0x7),                     // funct3
                     static_cast<uint8_t>((instruction >> 7) & 0x1F),   // rd
                     static_cast<uint8_t>((instruction >> 15) & 0x1F),  // rs1
@@ -125,8 +125,8 @@ void CPU::decode() {
                 break;
             }
             case Opcode::I_TYPE_ALU: {
-                IType i_type = {
-                    static_cast<ITypeFunct3>((instruction >> 12) &
+                ITypeAlu i_type = {
+                    static_cast<ITypeAluFunct3>((instruction >> 12) &
                                              0x7),                     // funct3
                     static_cast<uint8_t>((instruction >> 7) & 0x1F),   // rd
                     static_cast<uint8_t>((instruction >> 15) & 0x1F),  // rs1
@@ -140,9 +140,9 @@ void CPU::decode() {
                 pipeline.decode.instruction = i_type;
                 break;
             }
-            case Opcode::JALR: {
-                IType i_type = {
-                    static_cast<ITypeFunct3>((instruction >> 12) &
+            case Opcode::I_TYPE_CNTRL: {
+                ITypeControl i_type = {
+                    static_cast<ITypeControlFunct3>((instruction >> 12) &
                                              0x7),                     // funct3
                     static_cast<uint8_t>((instruction >> 7) & 0x1F),   // rd
                     static_cast<uint8_t>((instruction >> 15) & 0x1F),  // rs1
@@ -248,32 +248,24 @@ void CPU::execute() {
         if (std::holds_alternative<RType>(pipeline.execute.instruction)) {
             auto r_type = std::get<RType>(pipeline.execute.instruction);
             pipeline.execute.alu_result = execute_r_type(r_type);
-        } else if (std::holds_alternative<IType>(pipeline.execute.instruction)) {
-            auto i_type = std::get<IType>(pipeline.execute.instruction);
-            if (static_cast<int>(i_type.funct3) == 0b000 && i_type.rd == 0 &&
-                i_type.rs1 == 1 && i_type.imm == 0) {
-                set_status_flag(StatusFlags::STATUS_HALT);
-                LOG_INFO("Encountered ret instruction. Halting execution.");
-            } else if (i_type.funct3 == ITypeFunct3::ADDI ||
-                       i_type.funct3 == ITypeFunct3::SLTI ||
-                       i_type.funct3 == ITypeFunct3::SLTIU ||
-                       i_type.funct3 == ITypeFunct3::XORI ||
-                       i_type.funct3 == ITypeFunct3::ORI ||
-                       i_type.funct3 == ITypeFunct3::ANDI ||
-                       i_type.funct3 == ITypeFunct3::SLLI ||
-                       i_type.funct3 == ITypeFunct3::SRLI ||
-                       i_type.funct3 == ITypeFunct3::SRAI) {
+        } else if (std::holds_alternative<ITypeControl>(pipeline.execute.instruction)) {
+            auto i_type = std::get<ITypeControl>(pipeline.execute.instruction);
 
-                pipeline.execute.alu_result = execute_i_type(i_type);
-            } else if (i_type.funct3 == ITypeFunct3::LB ||
-                       i_type.funct3 == ITypeFunct3::LH ||
-                       i_type.funct3 == ITypeFunct3::LW ||
-                       i_type.funct3 == ITypeFunct3::LBU ||
-                       i_type.funct3 == ITypeFunct3::LHU) {
-                int32_t sign_extended_imm = static_cast<int32_t>(i_type.imm);
+            if (i_type.funct3 == ITypeControlFunct3::JALR) {
+                if(i_type.rd == 0 && i_type.rs1 == 1 && i_type.imm == 0)
+                {
+                    set_status_flag(StatusFlags::STATUS_HALT);
+                    LOG_INFO("Encountered ret instruction. Halting execution.");
+                }
+            }
+        } else if (std::holds_alternative<ITypeAlu>(pipeline.execute.instruction)) {
+            auto i_type = std::get<ITypeAlu>(pipeline.execute.instruction);
+            pipeline.execute.alu_result = execute_i_type_alu(i_type);
+        } else if (std::holds_alternative<ITypeLoad>(pipeline.execute.instruction)) {
+            auto i_type = std::get<ITypeLoad>(pipeline.execute.instruction);
+            int32_t sign_extended_imm = static_cast<int32_t>(i_type.imm);
                 pipeline.execute.alu_result =
                     registers[i_type.rs1].value + sign_extended_imm;
-            }
         } else if (std::holds_alternative<JType>(pipeline.execute.instruction)) {
             auto j_type = std::get<JType>(pipeline.execute.instruction);
             execute_j_type(j_type);
@@ -312,39 +304,35 @@ void CPU::mem() {
     if (pipeline.execute.valid) {
         pipeline.execute.valid = false;
 
-        if (std::holds_alternative<IType>(pipeline.memory.instruction)) {
-            auto i_type = std::get<IType>(pipeline.memory.instruction);
-            if (i_type.funct3 == ITypeFunct3::LB ||
-                i_type.funct3 == ITypeFunct3::LH ||
-                i_type.funct3 == ITypeFunct3::LW ||
-                i_type.funct3 == ITypeFunct3::LBU ||
-                i_type.funct3 == ITypeFunct3::LHU) {
-                uint32_t address = pipeline.execute.alu_result;
-                LOG_DEBUG("Executing memory load at address: 0x" +
-                          Memory::to_hex_string(address));
-                switch (i_type.funct3) {
-                    case ITypeFunct3::LB:
-                        pipeline.memory.result =
-                            (int8_t)memory.load_byte(address);
-                        break;
-                    case ITypeFunct3::LH:
-                        pipeline.memory.result =
-                            (int16_t)memory.load_half_word(address);
-                        break;
-                    case ITypeFunct3::LW:
-                        pipeline.memory.result = memory.load_word(address);
-                        break;
-                    default:
-                        LOG_ERROR("Unsupported load function! Funct3: " +
-                                  std::to_string(
-                                      static_cast<uint8_t>(i_type.funct3)));
-                        std::cerr << "Unsupported load function! Funct3: "
-                                  << static_cast<uint8_t>(i_type.funct3)
-                                  << std::endl;
-                }
-                pipeline.write_back.rd = i_type.rd;
-                pipeline.write_back.result = pipeline.memory.result;
+        if (std::holds_alternative<ITypeLoad>(pipeline.memory.instruction)) {
+            auto i_type = std::get<ITypeLoad>(pipeline.memory.instruction);
+
+            uint32_t address = pipeline.execute.alu_result;
+            LOG_DEBUG("Executing memory load at address: 0x" +
+                        Memory::to_hex_string(address));
+            // miss ITypeLoadFunct3::LBU and ITypeLoadFunct3::LHU
+            switch (i_type.funct3) {
+                case ITypeLoadFunct3::LB:
+                    pipeline.memory.result =
+                        (int8_t)memory.load_byte(address);
+                    break;
+                case ITypeLoadFunct3::LH:
+                    pipeline.memory.result =
+                        (int16_t)memory.load_half_word(address);
+                    break;
+                case ITypeLoadFunct3::LW:
+                    pipeline.memory.result = memory.load_word(address);
+                    break;
+                default:
+                    LOG_ERROR("Unsupported load function! Funct3: " +
+                                std::to_string(
+                                    static_cast<uint8_t>(i_type.funct3)));
+                    std::cerr << "Unsupported load function! Funct3: "
+                                << static_cast<uint8_t>(i_type.funct3)
+                                << std::endl;
             }
+            pipeline.write_back.rd = i_type.rd;
+            pipeline.write_back.result = pipeline.memory.result;
         } else if (std::holds_alternative<SType>(pipeline.memory.instruction)) {
             auto s_type = std::get<SType>(pipeline.memory.instruction);
             uint32_t address = pipeline.execute.alu_result;
@@ -392,31 +380,17 @@ void CPU::write_back() {
             registers[r_type.rd].value = pipeline.execute.alu_result;
             LOG_DEBUG("Write-back R-Type: x" + std::to_string(r_type.rd) +
                       " = " + std::to_string(pipeline.execute.alu_result));
-        } else if (std::holds_alternative<IType>(pipeline.write_back.instruction)) {
-            auto i_type = std::get<IType>(pipeline.write_back.instruction);
-            if (i_type.funct3 == ITypeFunct3::ADDI ||
-                i_type.funct3 == ITypeFunct3::SLTI ||
-                i_type.funct3 == ITypeFunct3::SLTIU ||
-                i_type.funct3 == ITypeFunct3::XORI ||
-                i_type.funct3 == ITypeFunct3::ORI ||
-                i_type.funct3 == ITypeFunct3::ANDI ||
-                i_type.funct3 == ITypeFunct3::SLLI ||
-                i_type.funct3 == ITypeFunct3::SRLI ||
-                i_type.funct3 == ITypeFunct3::SRAI) {
-                registers[i_type.rd].value = pipeline.execute.alu_result;
+        } else if (std::holds_alternative<ITypeAlu>(pipeline.write_back.instruction)) {
+            auto i_type = std::get<ITypeAlu>(pipeline.write_back.instruction);
+            registers[i_type.rd].value = pipeline.execute.alu_result;
                 LOG_DEBUG("Write-back I-Type: x" + std::to_string(i_type.rd) +
                           " = " +
                           Memory::to_hex_string(pipeline.execute.alu_result));
-            } else if (i_type.funct3 == ITypeFunct3::LB ||
-                       i_type.funct3 == ITypeFunct3::LH ||
-                       i_type.funct3 == ITypeFunct3::LW ||
-                       i_type.funct3 == ITypeFunct3::LBU ||
-                       i_type.funct3 == ITypeFunct3::LHU) {
-                registers[i_type.rd].value = pipeline.memory.result;
-                LOG_DEBUG("Write-back I-Type: x" + std::to_string(i_type.rd) +
-                          " = " +
-                          Memory::to_hex_string(pipeline.memory.result));
-            }
+        } else if (std::holds_alternative<ITypeLoad>(pipeline.write_back.instruction)) {
+            auto i_type = std::get<ITypeLoad>(pipeline.write_back.instruction);
+            registers[i_type.rd].value = pipeline.memory.result;
+            LOG_DEBUG("Write-back I-Type Load: x" + std::to_string(i_type.rd) +
+                      " = " + std::to_string(pipeline.memory.result));
         } else if (std::holds_alternative<UType>(pipeline.write_back.instruction)) {
             auto u_type = std::get<UType>(pipeline.write_back.instruction);
             registers[u_type.rd].value = pipeline.execute.alu_result;
@@ -432,23 +406,23 @@ void CPU::write_back() {
  * @param pipeline The pipeline state.
  * @param instr The decoded I-Type instruction.
  */
-uint32_t CPU::execute_i_type(const IType &instr) {
+uint32_t CPU::execute_i_type_alu(const ITypeAlu &instr) {
     uint32_t result = 0;
     LOG_DEBUG("Executing I-Type instruction");
     switch (instr.funct3) {
-        case ITypeFunct3::ADDI:
+        case ITypeAluFunct3::ADDI:
             result = registers[instr.rs1].value + instr.imm;
             LOG_DEBUG("Executed ADDI: x" + std::to_string(instr.rd) + " = x" +
                       std::to_string(instr.rs1) + " + " +
                       std::to_string(instr.imm));
             break;
-        case ITypeFunct3::SLLI:
+        case ITypeAluFunct3::SLLI:
             result = registers[instr.rs1].value << (instr.imm & 0x1F);
             LOG_DEBUG("Executed SLLI: x" + std::to_string(instr.rd) + " = x" +
                       std::to_string(instr.rs1) + " << " +
                       std::to_string(instr.imm & 0x1F));
             break;
-        case ITypeFunct3::SLTI:
+        case ITypeAluFunct3::SLTI:
             result = (int32_t)registers[instr.rs1].value < (int32_t)instr.imm
                          ? 1
                          : 0;
@@ -456,19 +430,19 @@ uint32_t CPU::execute_i_type(const IType &instr) {
                       std::to_string(instr.rs1) + " < " +
                       std::to_string(instr.imm));
             break;
-        case ITypeFunct3::SLTIU:
+        case ITypeAluFunct3::SLTIU:
             result = registers[instr.rs1].value < (uint32_t)instr.imm ? 1 : 0;
             LOG_DEBUG("Executed SLTIU: x" + std::to_string(instr.rd) + " = x" +
                       std::to_string(instr.rs1) + " < " +
                       std::to_string(instr.imm));
             break;
-        case ITypeFunct3::XORI:
+        case ITypeAluFunct3::XORI:
             result = registers[instr.rs1].value ^ instr.imm;
             LOG_DEBUG("Executed XORI: x" + std::to_string(instr.rd) + " = x" +
                       std::to_string(instr.rs1) + " ^ " +
                       std::to_string(instr.imm));
             break;
-        case ITypeFunct3::SRLI:
+        case ITypeAluFunct3::SRLI:
             // case ITypeFunct3::SRAI:
             if ((instr.imm & 0x40000000) == 0) {
                 result = registers[instr.rs1].value >> (instr.imm & 0x1F);
@@ -483,13 +457,13 @@ uint32_t CPU::execute_i_type(const IType &instr) {
                           std::to_string(instr.imm & 0x1F));
             }
             break;
-        case ITypeFunct3::ORI:
+        case ITypeAluFunct3::ORI:
             result = registers[instr.rs1].value | instr.imm;
             LOG_DEBUG("Executed ORI: x" + std::to_string(instr.rd) + " = x" +
                       std::to_string(instr.rs1) + " | " +
                       std::to_string(instr.imm));
             break;
-        case ITypeFunct3::ANDI:
+        case ITypeAluFunct3::ANDI:
             result = registers[instr.rs1].value & instr.imm;
             LOG_DEBUG("Executed ANDI: x" + std::to_string(instr.rd) + " = x" +
                       std::to_string(instr.rs1) + " & " +

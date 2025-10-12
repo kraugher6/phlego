@@ -31,9 +31,9 @@ enum class RTypeFunct3 : uint8_t
 };
 
 /**
- * @brief Enum for I-Type funct3 values.
+ * @brief Enum for I-Type ALU funct3 values.
  */
-enum class ITypeFunct3 : uint8_t
+enum class ITypeAluFunct3 : uint8_t
 {
     ADDI = 0x0,
     SLTI = 0x2,
@@ -44,11 +44,26 @@ enum class ITypeFunct3 : uint8_t
     SLLI = 0x1,
     SRLI = 0x5,
     SRAI = 0x5,
+};
+
+/**
+ * @brief Enum for I-Type Load funct3 values.
+ */
+enum class ITypeLoadFunct3 : uint8_t
+{
     LB = 0x0,
     LH = 0x1,
     LW = 0x2,
     LBU = 0x4,
     LHU = 0x5
+};
+
+/**
+ * @brief Enum for I-Type Load funct3 values.
+ */
+enum class ITypeControlFunct3 : uint8_t
+{
+    JALR = 0x0,
 };
 
 /**
@@ -107,7 +122,7 @@ enum class Opcode : uint8_t
     R_TYPE = 0x33,
     I_TYPE_LOAD = 0x03,
     I_TYPE_ALU = 0x13,
-    JALR = 0x67,
+    I_TYPE_CNTRL = 0x67,
     S_TYPE = 0x23,
     B_TYPE = 0x63,
     J_TYPE = 0x6F,
@@ -139,9 +154,31 @@ struct RType
 /**
  * @brief Struct for I-Type instructions.
  */
-struct IType
+struct ITypeLoad
 {
-    ITypeFunct3 funct3; ///< Function 3 field
+    ITypeLoadFunct3 funct3; ///< Function 3 field
+    uint8_t rd;         ///< Destination register
+    uint8_t rs1;        ///< Source register 1
+    int32_t imm;        ///< Immediate value
+};
+
+/**
+ * @brief Struct for I-Type instructions.
+ */
+struct ITypeAlu
+{
+    ITypeAluFunct3 funct3; ///< Function 3 field
+    uint8_t rd;         ///< Destination register
+    uint8_t rs1;        ///< Source register 1
+    int32_t imm;        ///< Immediate value
+};
+
+/**
+ * @brief Struct for I-Type instructions.
+ */
+struct ITypeControl
+{
+    ITypeControlFunct3 funct3; ///< Function 3 field
     uint8_t rd;         ///< Destination register
     uint8_t rs1;        ///< Source register 1
     int32_t imm;        ///< Immediate value
@@ -197,14 +234,14 @@ struct FetchStage
 
 struct DecodeStage
 {
-    std::variant<RType, IType, SType, BType, JType, UType> instruction;
+    std::variant<RType, ITypeAlu, ITypeLoad, ITypeControl, SType, BType, JType, UType> instruction;
     uint32_t pc;
     bool valid = false;
 };
 
 struct ExecuteStage
 {
-    std::variant<RType, IType, SType, BType, JType, UType> instruction;
+    std::variant<RType, ITypeAlu, ITypeLoad, ITypeControl, SType, BType, JType, UType> instruction;
     uint32_t pc;
     uint32_t alu_result;
     bool valid = false;
@@ -212,7 +249,7 @@ struct ExecuteStage
 
 struct MemoryStage
 {
-    std::variant<RType, IType, SType, BType, JType, UType> instruction;
+    std::variant<RType, ITypeAlu, ITypeLoad, ITypeControl, SType, BType, JType, UType> instruction;
     uint32_t pc;
     uint32_t result;
     bool valid = false;
@@ -220,7 +257,7 @@ struct MemoryStage
 
 struct WriteBackStage
 {
-    std::variant<RType, IType, SType, BType, JType, UType> instruction;
+    std::variant<RType, ITypeAlu, ITypeLoad, ITypeControl, SType, BType, JType, UType> instruction;
     uint32_t pc;
     uint32_t rd;
     uint32_t result;
@@ -299,7 +336,7 @@ public:
      * @param pipeline The pipeline state.
      * @param instr The decoded I-Type instruction.
      */
-    uint32_t execute_i_type(const IType &instr);
+    uint32_t execute_i_type_alu(const ITypeAlu &instr);
 
     /**
      * @brief Execute a store instruction.
