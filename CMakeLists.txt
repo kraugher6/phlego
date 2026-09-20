@@ -23,6 +23,8 @@ set(CORE_SOURCES
     src/core/memory.cpp
     src/core/pipeline.cpp
     src/core/runner.cpp
+    src/hazard/hazard_unit.cpp
+    src/hazard/forwarding_unit.cpp
     src/utils/elf_loader.cpp
     src/logger.cpp
 )
