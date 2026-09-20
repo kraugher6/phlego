@@ -12,12 +12,6 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
-# Set the logging level (DEBUG, INFO, ERROR)
-if(NOT DEFINED LOG_LEVEL)
-    set(LOG_LEVEL LOG_LEVEL_INFO)
-endif()
-add_compile_definitions(LOG_LEVEL=${LOG_LEVEL})
-
 # Build options
 option(ENABLE_TESTS "Enable building unit tests" ON)
 
@@ -27,15 +21,6 @@ set(CORE_SOURCES
     src/core/interpreter.cpp
     src/core/register_file.cpp
     src/core/memory.cpp
-    src/core/pipeline.cpp
-    src/core/runner.cpp
-    src/hazard/hazard_unit.cpp
-    src/hazard/forwarding_unit.cpp
-    src/prediction/branch_predictor.cpp
-    src/cache/cache.cpp
-    src/ooo/scoreboard.cpp
-    src/ooo/tomasulo.cpp
-    src/utils/tracer.cpp
     src/utils/elf_loader.cpp
     src/logger.cpp
 )
