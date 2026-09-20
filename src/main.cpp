@@ -1,6 +1,7 @@
 #include <iostream>
 #include "core/memory.h"
-#include "core/interpreter.h"
+#include "core/pipeline.h"
+#include "core/runner.h"
 #include "logger.h"
 
 using namespace phlego;
@@ -20,11 +21,12 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    Interpreter interpreter(memory);
-    interpreter.set_pc(entry_point);
-    interpreter.set_register(2, 0x07FFFFF0); // Default SP
+    Pipeline pipeline(memory);
+    pipeline.set_pc(entry_point);
+    pipeline.set_register(2, 0x07FFFFF0); // Default SP
 
-    interpreter.run();
+    Runner runner(pipeline);
+    runner.run();
 
     return 0;
 }

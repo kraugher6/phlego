@@ -21,6 +21,8 @@ set(CORE_SOURCES
     src/core/interpreter.cpp
     src/core/register_file.cpp
     src/core/memory.cpp
+    src/core/pipeline.cpp
+    src/core/runner.cpp
     src/utils/elf_loader.cpp
     src/logger.cpp
 )
