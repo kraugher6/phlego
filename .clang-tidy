@@ -1,0 +1,17 @@
+Checks: >
+  -*,
+  clang-analyzer-*,
+  bugprone-*,
+  performance-*,
+  modernize-*,
+  readability-*,
+  cppcoreguidelines-*,
+  portability-*,
+  misc-*
+HeaderFilterRegex: 'src/|include/|test/'
+AnalyzeTemporaryDtors: true
+FormatStyle: file
+WarningsAsErrors: ''
+CheckOptions:
+  - key:             modernize-use-auto.MinTypeNameLength
+    value:           '0'
