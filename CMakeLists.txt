@@ -27,6 +27,8 @@ set(CORE_SOURCES
     src/hazard/forwarding_unit.cpp
     src/prediction/branch_predictor.cpp
     src/cache/cache.cpp
+    src/ooo/scoreboard.cpp
+    src/ooo/tomasulo.cpp
     src/utils/elf_loader.cpp
     src/logger.cpp
 )
