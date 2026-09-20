@@ -25,6 +25,7 @@ set(CORE_SOURCES
     src/core/runner.cpp
     src/hazard/hazard_unit.cpp
     src/hazard/forwarding_unit.cpp
+    src/prediction/branch_predictor.cpp
     src/utils/elf_loader.cpp
     src/logger.cpp
 )
