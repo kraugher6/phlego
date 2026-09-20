@@ -30,6 +30,7 @@ set(CORE_SOURCES
     src/ooo/scoreboard.cpp
     src/ooo/tomasulo.cpp
     src/utils/elf_loader.cpp
+    src/utils/tracer.cpp
     src/logger.cpp
 )
 
